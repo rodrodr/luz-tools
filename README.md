@@ -19,7 +19,8 @@ dijo en el pleno.
 
 ## Instalación
 
-Requisito: [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Requisito: [uv](https://docs.astral.sh/uv/getting-started/installation/). El paquete está en
+[PyPI](https://pypi.org/project/luz-mcp/), así que no hace falta clonar nada.
 
 **Claude Code**
 
@@ -27,14 +28,57 @@ Requisito: [uv](https://docs.astral.sh/uv/getting-started/installation/).
 claude mcp add luz -s user -- uvx luz-mcp
 ```
 
-**Otros clientes** (bloque `mcpServers` de su configuración):
+**Codex CLI**
 
-```json
-{ "mcpServers": { "luz": { "command": "uvx", "args": ["luz-mcp"] } } }
+```bash
+codex mcp add luz -- uvx luz-mcp
 ```
 
+**ChatGPT de escritorio** y **Codex** comparten un mismo archivo de configuración,
+`~/.codex/config.toml`. La orden anterior lo escribe; también puede añadirse a mano:
+
+```toml
+[mcp_servers.luz]
+command = "uvx"
+args = ["luz-mcp"]
+```
+
+ChatGPT en la web solo admite servidores remotos, así que no puede usar este.
+
+**OpenCode** (`~/.config/opencode/opencode.json`, dentro del bloque `"mcp"`, junto a los servidores
+que ya tenga):
+
+```json
+{
+  "mcp": {
+    "luz": { "type": "local", "command": ["uvx", "luz-mcp"], "enabled": true }
+  }
+}
+```
+
+**Antigravity** (`~/.gemini/config/mcp_config.json`, o *MCP Servers → Manage → View raw config*),
+**Claude Desktop** (`claude_desktop_config.json`), **Cursor** (`~/.cursor/mcp.json`), **Gemini CLI**
+(`~/.gemini/settings.json`), **Windsurf** y la mayoría de los demás clientes usan este bloque:
+
+```json
+{
+  "mcpServers": {
+    "luz": {
+      "command": "uvx",
+      "args": ["luz-mcp"]
+    }
+  }
+}
+```
+
+Hay que reiniciar el cliente después de cambiar la configuración. Las aplicaciones de escritorio no
+siempre ven el `PATH` de la terminal: si el servidor no arranca, cambie `"uvx"` por la ruta completa
+que da `which uvx` (por ejemplo, `/Users/usted/.local/bin/uvx`).
+
 Los datos se descargan una vez, con la herramienta `download_data` o desde la terminal. Son unos
-210 MB y se guardan en `~/.luz`, o en la carpeta que indique `LUZ_HOME`:
+210 MB y se guardan en `~/.luz`, o en la carpeta que indique `LUZ_HOME`. Con modelos locales, que
+son más lentos, conviene descargarlos desde la terminal para no chocar con el tiempo de espera del
+cliente:
 
 ```bash
 uvx luz-mcp download
@@ -136,8 +180,25 @@ what that deputy said on the floor.
 
 ```bash
 claude mcp add luz -s user -- uvx luz-mcp     # Claude Code
+codex mcp add luz -- uvx luz-mcp              # Codex CLI and the ChatGPT desktop app
 uvx luz-mcp download                          # the data, once (about 210 MB, in ~/.luz)
 ```
+
+**OpenCode** (`~/.config/opencode/opencode.json`, inside the `"mcp"` block):
+
+```json
+{ "mcp": { "luz": { "type": "local", "command": ["uvx", "luz-mcp"], "enabled": true } } }
+```
+
+**Antigravity, Claude Desktop, Cursor, Gemini CLI, Windsurf** and most other clients:
+
+```json
+{ "mcpServers": { "luz": { "command": "uvx", "args": ["luz-mcp"] } } }
+```
+
+Restart the client after changing its configuration. If a desktop app cannot start the server,
+replace `"uvx"` with the full path printed by `which uvx`. ChatGPT on the web only accepts remote
+servers.
 
 The tools are listed in the table above. What to keep in mind:
 
