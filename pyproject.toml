@@ -1,0 +1,40 @@
+[project]
+name = "luz-mcp"
+version = "0.1.0"
+description = "MCP server for Luz y Taquígrafos (debates of the Spanish Second Republic) and Afinidades Elegidas (its co-sponsorship networks)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Rodrigo Rodrigues-Silveira" }]
+keywords = ["mcp", "parliament", "Second Spanish Republic", "Segunda República", "parliamentary speeches", "co-sponsorship networks", "corpus"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: Spanish",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Sociology :: History",
+    "Topic :: Text Processing :: Linguistic",
+]
+dependencies = ["parlaibero-mcp>=0.4,<0.5"]
+
+[project.urls]
+Repository = "https://github.com/rodrodr/luz-tools"
+"Luz y Taquígrafos" = "https://doi.org/10.7910/DVN/THQCMI"
+"Afinidades Elegidas" = "https://doi.org/10.7910/DVN/CGOCUS"
+
+[project.scripts]
+luz-mcp = "luz_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/luz_mcp"]
+
+# development only: the engine from the sibling checkout (uv ignores this when building for PyPI)
+[tool.uv.sources]
+parlaibero-mcp = { path = "../../parlaibero_tools/mcp", editable = true }

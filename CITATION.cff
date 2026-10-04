@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, cite it as below. Cite also each dataset you use, with its version."
+title: "luz-mcp: MCP server for Luz y Taquígrafos and Afinidades Elegidas"
+type: software
+authors:
+  - family-names: Rodrigues-Silveira
+    given-names: Rodrigo
+    orcid: "https://orcid.org/0000-0002-6912-7689"
+    affiliation: "Universidad de Salamanca"
+version: "0.1.0"
+date-released: "2026-10-04"
+license: MIT
+repository-code: "https://github.com/rodrodr/luz-tools"
+references:
+  - type: dataset
+    title: "Luz y Taquígrafos: Parliamentary Debates in the Second Spanish Republic, 1931–1945"
+    doi: "10.7910/DVN/THQCMI"
+    authors: [{family-names: Rodrigues-Silveira, given-names: Rodrigo}, {family-names: García-Díez, given-names: Fátima}, {family-names: Llamazares, given-names: Iván}, {family-names: Martínez-Barahona, given-names: Elena}, {family-names: Barreto Martín, given-names: Eduardo}]
+  - type: dataset
+    title: "Afinidades Elegidas: Parliamentary Cosponsorship Networks of the Spanish Second Republic (1931-1939)"
+    doi: "10.7910/DVN/CGOCUS"
+    authors: [{family-names: Rodrigues-Silveira, given-names: Rodrigo}, {family-names: García-Díez, given-names: Fátima}, {family-names: Llamazares, given-names: Iván}, {family-names: Martínez-Barahona, given-names: Elena}, {family-names: Barreto Martín, given-names: Eduardo}]
