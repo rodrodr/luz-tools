@@ -202,3 +202,18 @@ def test_profile_and_library_export(home, tmp_path):
     assert b["corpus"] == "2REP_Diaries" and b["fuente"]["version"] == "V3"
     assert [i["speech_id"] for i in b["items"]] == [3, 5, 6]          # the row numbers of the V3 file
     assert r["files"][0].endswith("reforma.2replib")                 # one dataset: no country suffix
+
+
+def test_network_tools_on_a_library(home, tmp_path):
+    from luz_mcp import server as L
+    library.create("palabra", ["LT"], terms="palabra, reforma agraria")
+    r = L.mention_network("palabra", "speakers", min_mentions=1, output_dir=str(tmp_path / "red"))
+    s = r["networks"]["LT"]
+    assert s["honorifics"] is True                                     # Spanish: 'el Sr. Uno' names the deputy
+    assert ("9", "1", 1) in [tuple(e) for e in s["edge_list"]]          # the chair gives Ana Uno the floor
+    assert any(f.endswith(".html") for f in r["files"])
+    c = L.cooccurrence_network("palabra", [{"name": "reforma", "type": "concepto", "pattern": r"reforma agraria"},
+                                           {"name": "tierra", "type": "concepto", "pattern": r"\btierra\b"}],
+                               min_co=1, min_npmi=-1, formats=[])
+    assert c["networks"]["LT"]["N"] == 4
+    assert "mention_network" in L.methods_networks()

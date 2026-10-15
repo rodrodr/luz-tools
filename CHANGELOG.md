@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 · 2026-10-14
+
+Sobre el motor parlaibero-mcp 0.5.
+
+- `cooccurrence_network` y `mention_network` sobre una biblioteca, con los grupos de esta colección
+  (`party`, `party_family`, `ideology` y los `reg_*` del registro; por defecto `reg_family`). No hay variable
+  de sexo, así que los homónimos se separan por el nombre de pila o el partido escritos junto al apellido.
+- Recurso `luz://methods/networks` con el método.
+
 ## 0.1.0 · 2026-10-04
 
 Primera versión (plan: `docs/PLAN_mcp.md`).

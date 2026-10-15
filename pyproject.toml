@@ -1,6 +1,6 @@
 [project]
 name = "luz-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for Luz y Taquígrafos (debates of the Spanish Second Republic) and Afinidades Elegidas (its co-sponsorship networks)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,7 +18,7 @@ classifiers = [
     "Topic :: Sociology :: History",
     "Topic :: Text Processing :: Linguistic",
 ]
-dependencies = ["parlaibero-mcp>=0.4,<0.5"]
+dependencies = ["parlaibero-mcp>=0.5,<0.6"]
 
 [project.urls]
 Repository = "https://github.com/rodrodr/luz-tools"

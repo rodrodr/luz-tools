@@ -9,7 +9,7 @@ from pydantic import Field
 
 from . import profile  # noqa: F401  (activates the Luz profile before the engine is used)
 from . import __version__, afinidades as ae, data
-from parlaibero_mcp import analysis, library as libmod, server as S, store
+from parlaibero_mcp import analysis, library as libmod, networks, server as S, store
 from parlaibero_mcp.server import Server, Tools, make_before
 
 INSTRUCTIONS = """\
@@ -38,7 +38,11 @@ How to work with it:
 8. Network metrics and roles are the published ones, not recomputed. Topic, title and defence of
    each measure were assigned with language models and human review. Some signature lists are
    truncated in the Diario, so their edges are missing.
-9. Row identifiers are stable within a version (Luz V3 renumbered every row). Cite each dataset
+9. Networks on a library: `cooccurrence_network` (entities mentioned in the same intervention, by whom)
+   and `mention_network` (who names whom on the floor; the register has no sex, so homonyms are told
+   apart by a given name or party written next to the name, or listed apart). Method: resource
+   luz://methods/networks.
+10. Row identifiers are stable within a version (Luz V3 renumbered every row). Cite each dataset
    with its version (`how_to_cite`).
 """
 
@@ -47,7 +51,8 @@ LOGGED = {"query_sql", "search_text", "term_frequency", "ngram_viewer", "term_co
           "get_intervention", "library_create", "library_edit", "library_combine", "library_describe",
           "library_delete", "library_rebuild", "library_export", "library_import", "search_measures",
           "get_measure", "coauthorship_network", "deputy_neighbors", "cross_group_coauthorship",
-          "network_metrics", "structural_roles", "speech_by_network", "deputy_profile"}
+          "network_metrics", "structural_roles", "speech_by_network", "deputy_profile", "cooccurrence_network",
+          "mention_network"}
 
 _server = Server(name="luz", instructions=INSTRUCTIONS)
 mcp = Tools(_server, make_before(LOGGED, "luz-mcp"))
@@ -473,6 +478,91 @@ def deputy_profile(who: Deputy) -> dict:
     """Everything about one deputy: register by legislature, how much and when they spoke, the
     measures they signed, led and defended, their topics, and their network position and role."""
     return ae.deputy_profile(who)
+
+
+# ── networks on a library (the engine's tools, with this collection's groups) ─────
+
+GroupBy = Annotated[Literal["party", "party_family", "ideology", "reg_party", "reg_family", "reg_ideology"], Field(
+    description="Column the group labels refer to: Luz labels (party, party_family, ideology) or the revised "
+                "register (reg_*)")]
+Groups = Annotated[dict[str, list[str]] | None, Field(
+    description="Up to two contrast groups of labels, e.g. {'izquierda': ['Socialista', 'Republicanos de "
+                "izquierda'], 'derecha': ['Conservadores']}; other labels go to 'rest' and are reported")]
+OutDir = Annotated[str | None, Field(description="ABSOLUTE folder for the files (HTML, CSV, JSON, summary)")]
+Formats = Annotated[list[Literal["html", "csv", "json", "md"]] | None, Field(
+    description="Files to write in output_dir (default all four)")]
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def cooccurrence_network(
+    library: Annotated[str, Field(description="Library name (the network is built on its interventions)")],
+    entities: Annotated[list[dict] | None, Field(
+        description="[{name, type: persona|institucion|concepto, pattern (regex on lower case without accents), "
+                    "exclude}]. A match inside a longer match of another entity does not count. Omit to get "
+                    "candidates first")] = None,
+    groups: Groups = None,
+    group_by: GroupBy = "reg_family",
+    date_from: DateFrom = None, date_to: DateTo = None,
+    exclude_chair: ExcludeChair = False, max_turn_words: MaxTurnWords = None,
+    min_co: Annotated[int | None, Field(ge=1, description="Minimum interventions together; default "
+                                                         "max(5, N/120), reported")] = None,
+    min_npmi: Annotated[float, Field(ge=-1, le=1, description="Minimum NPMI (unrounded)")] = 0.10,
+    max_nodes: Annotated[int, Field(ge=2, le=400)] = 60,
+    max_entities: Annotated[int, Field(ge=2, le=400)] = 150,
+    kwic_per_entity: Annotated[int, Field(ge=0, le=20)] = 5,
+    seed: int = 1,
+    output_dir: OutDir = None, formats: Formats = None, overwrite: bool = False,
+) -> dict:
+    """Network of entities (people, institutions, concepts) mentioned in the same intervention of a
+    library: co (volume), NPMI (affinity), Jaccard, each entity's bias between two groups, Leiden
+    communities, centralities, examples and ambiguity warnings. Writes an interactive HTML (light/dark,
+    accessible, with tables), CSV, JSON and a summary. Without `entities` it proposes candidates and
+    builds nothing until you confirm them."""
+    f = _F(date_from, date_to, exclude_chair=exclude_chair, max_turn_words=max_turn_words, library=library)
+    return networks.cooccurrence_network(f, entities, groups, group_by, min_co, min_npmi, max_nodes, max_entities,
+                                         kwic_per_entity, seed, output_dir, formats, overwrite)
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def mention_network(
+    library: Annotated[str, Field(description="Library name (the network is built on its interventions)")],
+    target_scope: Annotated[Literal["speakers", "external", "both"], Field(
+        description="Who can be mentioned: deputies of the chamber, the external actors given, or both")] = "both",
+    external_actors: Annotated[list[dict] | None, Field(
+        description="People or bodies outside the chamber: [{name, aliases: [...], role}]. Matched first, so "
+                    "declaring a namesake of a deputy also keeps it from being taken for the deputy")] = None,
+    mention_kinds: Annotated[list[Literal["reference", "address"]] | None, Field(
+        description="'reference' = talking ABOUT someone (default); 'address' = speaking TO them")] = None,
+    groups: Groups = None,
+    group_by: GroupBy = "reg_family",
+    date_from: DateFrom = None, date_to: DateTo = None,
+    exclude_chair: ExcludeChair = False, max_turn_words: MaxTurnWords = None,
+    min_mentions: Annotated[int, Field(ge=1, description="Minimum interventions per directed edge")] = 2,
+    min_speakers: Annotated[int, Field(ge=1, description="Minimum distinct speakers mentioning a target")] = 1,
+    top_n: Annotated[int, Field(ge=2, le=400, description="People kept, by total strength")] = 60,
+    honorifics: Annotated[bool | None, Field(
+        description="Whether 'señor X' alone names the deputy X (default yes, as in Spanish chambers)")] = None,
+    seed: int = 1,
+    validation_sample: Annotated[int, Field(ge=0, le=1000, description="Write a random sample of N resolved "
+                                                                        "mentions to check by hand")] = 0,
+    output_dir: OutDir = None, formats: Formats = None, overwrite: bool = False,
+) -> dict:
+    """Directed network of who names whom in a library: speaker → deputy in office that day (from the
+    register) or → an external actor you declare. Separates talking about someone from speaking to them,
+    leaves out the Diario's notes in brackets and lists ambiguous names apart (never guessed). In/out
+    strength, PageRank, reciprocity, Leiden communities, a group → group matrix, E-I and asymmetric pairs;
+    interactive HTML, CSV, JSON and a summary."""
+    f = _F(date_from, date_to, exclude_chair=exclude_chair, max_turn_words=max_turn_words, library=library)
+    return networks.mention_network(f, target_scope, external_actors, mention_kinds, groups, group_by,
+                                    min_mentions, min_speakers, top_n, seed, validation_sample, output_dir,
+                                    formats, overwrite, honorifics)
+
+
+@_server.resource("luz://methods/networks", mime_type="text/markdown")
+def methods_networks() -> str:
+    """How cooccurrence_network and mention_network are built (the engine's method document)."""
+    from importlib.resources import files
+    return files("parlaibero_mcp").joinpath("methods_networks.md").read_text(encoding="utf-8")
 
 
 @_server.resource("luz://about", mime_type="text/markdown")

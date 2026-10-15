@@ -97,6 +97,9 @@ uvx luz-mcp download
   `cross_group_coauthorship`
 - *«¿Hablan distinto en el pleno los diputados que articulan la red y los que se quedan en su
   partido?»*: `speech_by_network` y `distinctive_words`
+- *«En los debates de la reforma agraria, ¿qué instituciones y conceptos aparecen juntos, y cuáles
+  mencionan más las izquierdas que las derechas?»*: `library_create` y `cooccurrence_network`
+- *«¿Quién nombra a quién en esos debates, y cuánto se nombran los grupos entre sí?»*: `mention_network`
 
 ## Herramientas
 
@@ -109,6 +112,7 @@ uvx luz-mcp download
 | red | `coauthorship_network` (exporta GraphML o CSV para Gephi, igraph o R) · `deputy_neighbors` · `cross_group_coauthorship` |
 | métricas | `network_metrics` · `structural_roles` (las publicadas, sin recalcular) |
 | discurso × red | `speech_by_network` · `deputy_profile` |
+| redes sobre una biblioteca | `cooccurrence_network` (entidades mencionadas en la misma intervención) · `mention_network` (quién nombra a quién en el pleno). Escriben una página HTML interactiva, CSV, JSON y un resumen en la carpeta absoluta que se indique; el método está en el recurso `luz://methods/networks` |
 | reproducibilidad | `query_sql` (SQL de solo lectura) · `export_result` · `query_log` |
 
 ## Lo que conviene saber
@@ -125,6 +129,9 @@ uvx luz-mcp download
 - **Las métricas y roles de red son los publicados.** Al cargar los datos, el grado de cada
   diputado se recalcula desde la lista de aristas y se comprueba que coincide.
 - **Algunas listas de firmas están truncadas en el Diario,** y a esas medidas les faltan aristas.
+- **`mention_network` no puede separar homónimos por sexo,** porque no hay variable de sexo. Los separa
+  por el nombre de pila o el partido escritos junto al apellido; lo que sigue siendo ambiguo se lista
+  aparte y no se asigna. Las acotaciones del Diario entre paréntesis («(El Sr. X: …)») no cuentan.
 - **La presidencia queda fuera de `speech_by_network` por defecto.** No firma iniciativas, así que
   aparece entre los diputados aislados de la red, pero habla en todas las sesiones para dar la
   palabra.
@@ -211,6 +218,10 @@ The tools are listed in the table above. What to keep in mind:
 - **Some signature lists are truncated.**
 - **The chair is left out of `speech_by_network` by default.** It signs no initiatives but speaks
   in every sitting.
+- **Networks on a library:** `cooccurrence_network` (entities mentioned in the same intervention) and
+  `mention_network` (who names whom). With no sex variable, `mention_network` tells namesakes apart by a
+  given name or party written next to the surname, and lists the rest apart. Method: resource
+  `luz://methods/networks`.
 - **Libraries are written for the Luz y Taquígrafos explorer with the row numbers of version 3.**
   Import them there only with the version 3 CSV loaded.
 
