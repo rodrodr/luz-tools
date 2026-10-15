@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 · 2026-10-14
+## 0.2.0 · 2026-10-14 · publicada en PyPI
 
 Sobre el motor parlaibero-mcp 0.5.
 
