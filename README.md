@@ -95,6 +95,8 @@ uvx luz-mcp download
   `search_measures` y `get_measure`
 - *«¿Entre qué familias se firman más iniciativas conjuntas en la segunda legislatura?»*:
   `cross_group_coauthorship`
+- *«¿Quiénes reciben el apoyo más estrecho de sus colegas en las Constituyentes, y quién los apoya?»*:
+  `connectedness`
 - *«¿Hablan distinto en el pleno los diputados que articulan la red y los que se quedan en su
   partido?»*: `speech_by_network` y `distinctive_words`
 - *«En los debates de la reforma agraria, ¿qué instituciones y conceptos aparecen juntos, y cuáles
@@ -110,7 +112,7 @@ uvx luz-mcp download
 | bibliotecas | `library_create` · `library_describe` · `library_edit` · `library_combine` · `library_rebuild` · `library_delete` · `library_export` · `library_import` |
 | medidas | `search_measures` · `get_measure` |
 | red | `coauthorship_network` (exporta GraphML o CSV para Gephi, igraph o R) · `deputy_neighbors` · `cross_group_coauthorship` |
-| métricas | `network_metrics` · `structural_roles` (las publicadas, sin recalcular) |
+| métricas | `network_metrics` · `structural_roles` (las publicadas, sin recalcular) · `connectedness` (Fowler 2006, calculada aquí desde las firmas; exporta CSV o GraphML) |
 | discurso × red | `speech_by_network` · `deputy_profile` |
 | redes sobre una biblioteca | `cooccurrence_network` (entidades mencionadas en la misma intervención) · `mention_network` (quién nombra a quién en el pleno). Escriben una página HTML interactiva, CSV, JSON y un resumen en la carpeta absoluta que se indique; el método está en el recurso `luz://methods/networks` |
 | reproducibilidad | `query_sql` (SQL de solo lectura) · `export_result` · `query_log` |
@@ -128,6 +130,16 @@ uvx luz-mcp download
   1933-1936.
 - **Las métricas y roles de red son los publicados.** Al cargar los datos, el grado de cada
   diputado se recalcula desde la lista de aristas y se comprueba que coincide.
+- **`connectedness` sí se calcula aquí,** con la medida de Fowler (2006, *Political Analysis* 14: 456-487):
+  cada cofirmante apoya al primer firmante con una fuerza de 1/(número de cofirmantes) por medida, la
+  distancia es la inversa de esa fuerza y la puntuación es la inversa de la distancia media más corta
+  desde el resto de la Cámara, una red por legislatura. El primer firmante hace de *sponsor*: su firma
+  es siempre la del `id_dip_primer_autor`, el orden casi nunca es alfabético y defiende la medida en el
+  85 % de las defendidas (Afinidades v3). Las firmas ilegibles y el «Siguen las firmas hasta N» cuentan en el número de
+  cofirmantes. Como nadie es alcanzable desde todos los demás miembros, la puntuación lleva la
+  corrección de Wasserman y Faust, que coincide con la de Fowler cuando el alcance es completo. Quien
+  nunca firmó primero, o cuyas medidas nadie más firmó, no recibe apoyo y puntúa 0.
+  `ties="undirected"` usa la ponderación de Newman (2001) entre todos los firmantes.
 - **Algunas listas de firmas están truncadas en el Diario,** y a esas medidas les faltan aristas.
 - **`mention_network` no puede separar homónimos por sexo,** porque no hay variable de sexo. Los separa
   por el nombre de pila o el partido escritos junto al apellido; lo que sigue siendo ambiguo se lista
@@ -215,6 +227,10 @@ The tools are listed in the table above. What to keep in mind:
   of the revised register.
 - **The two datasets label the second legislature differently:** 1933-1935 and 1933-1936.
 - **The network metrics are the published ones,** checked on import against the edge list.
+- **`connectedness` is computed here,** with Fowler's (2006) measure: each co-signatory supports the
+  first signatory with strength 1/(co-signatories) per measure, distance = 1/strength, one network per
+  legislature, corrected for deputies who cannot reach one another (Wasserman and Faust; equal to
+  Fowler's when reach is complete). The first signatory stands for the sponsor.
 - **Some signature lists are truncated.**
 - **The chair is left out of `speech_by_network` by default.** It signs no initiatives but speaks
   in every sitting.

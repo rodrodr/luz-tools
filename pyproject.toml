@@ -1,6 +1,6 @@
 [project]
 name = "luz-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server for Luz y Taquígrafos (debates of the Spanish Second Republic) and Afinidades Elegidas (its co-sponsorship networks)"
 readme = "README.md"
 requires-python = ">=3.10"

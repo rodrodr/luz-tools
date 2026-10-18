@@ -217,3 +217,33 @@ def test_network_tools_on_a_library(home, tmp_path):
                                min_co=1, min_npmi=-1, formats=[])
     assert c["networks"]["LT"]["N"] == 4
     assert "mention_network" in L.methods_networks()
+
+
+def test_connectedness_weights_and_paths():
+    # Fowler's Fig. 2: Schrock co-signs three of Akin's bills, with 92, 1 and 225 co-signatories
+    w, q = ae._fowler_ties([{"sponsor": 1, "signers": [1, 2], "signatures": c + 1} for c in (92, 1, 225)])
+    assert round(w[(2, 1)], 3) == 1.015 and q[(2, 1)] == 3 and (1, 2) not in w
+    # a strong indirect path (2 → 3 → 1, distance 2) beats a weak direct tie (2 → 1, distance 10)
+    s = ae._connectedness_scores([1, 2, 3, 4], {(2, 1): 0.1, (2, 3): 1.0, (3, 1): 1.0})
+    assert s[1] == {"reached_by": 2, "sum_distance": 3.0, "sum_inverse": 1.5}
+    assert s[2]["reached_by"] == 0                                    # nobody supports 2
+    # when everyone reaches j, the reach-corrected score is Fowler's (n − 1)/Σd
+    s = ae._connectedness_scores([1, 2, 3], {(2, 1): 1.0, (3, 1): 0.5})[1]
+    assert s["reached_by"] ** 2 / (2 * s["sum_distance"]) == pytest.approx(2 / 3)
+
+
+def test_connectedness_on_the_data(home, tmp_path):
+    r = ae.connectedness("1931-1933", who="Ana")
+    assert r["summary"]["members"] == 4 and r["summary"]["ties"] == 1   # 2 → 1 (measure 10)
+    assert r["ranking"][0]["id_dip"] == 1 and r["ranking"][0]["connectedness"] == pytest.approx(1 / 3)
+    assert r["deputy"]["closest_supporters"][0]["id_dip"] == 2 and r["deputy"]["rank"] == 1
+    assert "correlation_with_published_metrics" in r
+    # measure 11: sponsor 4, co-signed by 3 and one illegible, 'Siguen las firmas hasta 5' → c = 4
+    r = ae.connectedness("1933-1936", path=str(tmp_path / "c.csv"))
+    assert r["strongest_ties"][0]["weight"] == 0.25 and r["ranking"][0]["connectedness"] == 0.25
+    assert r["summary"]["measures_with_truncated_lists_used"] == 1 and len(r["files"]) == 2
+    assert ae.connectedness("1933-1936", ties="undirected")["summary"]["deputies_reached"] == 2
+    with pytest.raises(ValueError, match="legislature"):
+        ae.connectedness("total")
+    with pytest.raises(LookupError, match="not a member"):
+        ae.connectedness("1931-1933", who="Dani")

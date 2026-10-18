@@ -26,8 +26,9 @@ How to work with it:
    (`library_create` …) to work on a subset; `query_sql` for anything else (schema: `describe_data`).
 3. Measures and network: `search_measures`, `get_measure` (with the debate where it was read and
    defended), `coauthorship_network`, `deputy_neighbors`, `cross_group_coauthorship`,
-   `network_metrics`, `structural_roles`, `deputy_profile`, and `speech_by_network`, which saves the
-   speeches of each network role as a library so the text tools can compare them.
+   `network_metrics`, `structural_roles`, `connectedness` (Fowler 2006), `deputy_profile`, and
+   `speech_by_network`, which saves the speeches of each network role as a library so the text tools
+   can compare them.
 4. There is NO sex variable in either dataset: nothing can be broken down by sex.
 5. speaker = SUMARIO (session summary, order 0) and COMENTARIOS (documents read out, votes, the
    Diario's narration) are not speech: dm_speech = 0. Filter dm_speech = 1 to study what was said.
@@ -35,7 +36,8 @@ How to work with it:
    and `reg_party`, `reg_family`, `reg_ideology` from the Afinidades register (revised). Compare
    voice with seats (share_of_voice) only with the reg_* labels, which the register of members shares.
 7. The legislature labels differ: Luz says 1933-1935, Afinidades 1933-1936 (the same legislature).
-8. Network metrics and roles are the published ones, not recomputed. Topic, title and defence of
+8. Network metrics and roles are the published ones, not recomputed; only `connectedness` is computed
+   here, from the signatures (the first signatory stands for Fowler's sponsor). Topic, title and defence of
    each measure were assigned with language models and human review. Some signature lists are
    truncated in the Diario, so their edges are missing.
 9. Networks on a library: `cooccurrence_network` (entities mentioned in the same intervention, by whom)
@@ -51,8 +53,8 @@ LOGGED = {"query_sql", "search_text", "term_frequency", "ngram_viewer", "term_co
           "get_intervention", "library_create", "library_edit", "library_combine", "library_describe",
           "library_delete", "library_rebuild", "library_export", "library_import", "search_measures",
           "get_measure", "coauthorship_network", "deputy_neighbors", "cross_group_coauthorship",
-          "network_metrics", "structural_roles", "speech_by_network", "deputy_profile", "cooccurrence_network",
-          "mention_network"}
+          "network_metrics", "structural_roles", "connectedness", "speech_by_network", "deputy_profile",
+          "cooccurrence_network", "mention_network"}
 
 _server = Server(name="luz", instructions=INSTRUCTIONS)
 mcp = Tools(_server, make_before(LOGGED, "luz-mcp"))
@@ -451,6 +453,34 @@ def structural_roles(period: Period = "total", by: Literal["party", "family"] = 
     """How the six published structural roles (isolated … leader of the chamber) are distributed by
     party or family, and who the leaders and articulators are."""
     return ae.structural_roles(period, by)
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def connectedness(
+    legislature: Annotated[Literal["1931-1933", "1933-1936", "1936-1939"], Field(
+        description="Legislature: one network each, as Fowler builds one per chamber and Congress")],
+    who: Annotated[str | None, Field(description="A deputy (id or name): their score, rank and closest "
+                                                 "supporters")] = None,
+    ties: Annotated[Literal["directed", "undirected"], Field(
+        description="directed (Fowler): co-signatory → first signatory, w = Σ 1/co-signatories; undirected "
+                    "(Newman 2001): every pair of signatories, w = Σ 1/(signatories − 1)")] = "directed",
+    topic: Topic = None,
+    measure_type: Annotated[str | None, Field(description="Type of measure (ILIKE)")] = None,
+    date_from: DateFrom = None, date_to: DateTo = None,
+    measure_ids: Annotated[list[int] | None, Field(description="Only these measures")] = None,
+    include_truncated: Annotated[bool, Field(description="Include measures whose signature list is truncated")] = True,
+    top: Annotated[int, Field(ge=1, le=1000, description="Deputies in the ranking")] = 20,
+    path: Annotated[str | None, Field(description="Write the scores and ties: '.csv' (deputies and ties files) or "
+                                                  "'.graphml' (Gephi, igraph, networkx)")] = None,
+    overwrite: bool = False,
+) -> dict:
+    """Legislative connectedness (Fowler 2006, Political Analysis), computed from the signatures: tie
+    strength from each co-signatory to the first signatory, weighted by how many co-signed the
+    measure; distance = 1/strength; the inverse of the mean shortest distance from the rest of the
+    chamber, corrected for deputies who cannot reach one another. Ranking, strongest ties, a deputy's
+    closest supporters, and the correlation with the published centralities."""
+    return ae.connectedness(legislature, who, ties, topic, measure_type, date_from, date_to, measure_ids,
+                            include_truncated, top, path, overwrite)
 
 
 # ── speech × network ──────────────────────────────────────────────────────────

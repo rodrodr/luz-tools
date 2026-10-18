@@ -6,7 +6,8 @@ Tables (all `ae_*`, loaded by `load`):
     ae_signatures    one row per signature
     ae_edges         one row per pair of co-signatories of a measure (the published edge list)
     ae_deputies      one row per deputy and legislature (the register)
-    ae_metrics       published network metrics per deputy and period (not recomputed)
+    ae_metrics       published network metrics per deputy and period (not recomputed; `connectedness`
+                     is the one measure computed here, from the signatures)
     ae_proximity     published party and family proximities (and party co-signature weights)
     ae_party_stats   published per-party statistics; ae_communities: party communities
     ae_parties · ae_topics   dictionaries
@@ -15,9 +16,12 @@ their starting year.
 """
 from __future__ import annotations
 
+import heapq
 import json
+import math
 import os
 import re
+import statistics
 import tempfile
 import unicodedata
 from collections import Counter, defaultdict
@@ -544,6 +548,293 @@ def cross_group_coauthorship(by="family", legislature=None, topic=None) -> dict:
         out["notes"].append("published_proximity: the proximity index published by Afinidades Elegidas (see its "
                             "methodology), read as it is.")
     return out
+
+
+# ── connectedness (Fowler 2006), computed here ────────────────────────────────
+
+FOWLER = ("Fowler, J. H. (2006). Connecting the Congress: A Study of Cosponsorship Networks. Political Analysis "
+          "14(4): 456-487. doi:10.1093/pan/mpl002")
+NEWMAN = ("Newman, M. E. J. (2001). Scientific collaboration networks. II. Shortest paths, weighted networks, and "
+          "centrality. Physical Review E 64: 016132. doi:10.1103/PhysRevE.64.016132")
+
+
+def _measure_signers(legislature, topic=None, measure_type=None, date_from=None, date_to=None, measure_ids=None,
+                     include_truncated=True) -> list[dict]:
+    """One row per measure: its first signatory, its identified signatories in order, and how many
+    signatures it had (illegible ones and the 'Siguen las firmas hasta N' of truncated lists included)."""
+    w, p = _measure_filter(legislature, topic, measure_type, date_from, date_to, measure_ids, alias="m")
+    having = "" if include_truncated else " HAVING NOT bool_or(s.truncada)"
+    cols, rows, _ = store.run_query(f"""SELECT m.id_medida, m.id_dip_primer_autor AS sponsor,
+                         list(s.id_dip ORDER BY s.orden_firma) FILTER (WHERE s.id_dip IS NOT NULL) AS signers,
+                         greatest(count(*), coalesce(max(s.firmas_declaradas), 0)) AS signatures,
+                         bool_or(s.truncada) AS truncated
+                  FROM ae_measures m JOIN ae_signatures s USING (id_medida) WHERE true{w}
+                  GROUP BY 1, 2{having}""", p, max_rows=1_000_000)
+    return [dict(zip(cols, r)) for r in rows]  # not _q: it would turn the lists into text
+
+
+def _fowler_ties(measures: list[dict], directed: bool = True) -> tuple[dict, Counter]:
+    """Tie strength w[(i, j)] = Σ_ℓ a_ijℓ / c_ℓ: directed, from each co-signatory i to the first
+    signatory j, with c_ℓ the co-signatories of measure ℓ (Fowler 2006); or undirected, every pair
+    with 1/(k_ℓ − 1), k_ℓ its signatories (Newman 2001). Also the number of measures behind each tie."""
+    w, q = defaultdict(float), Counter()
+    for m in measures:
+        c = m["signatures"] - 1
+        if c < 1:
+            continue
+        signers = list(dict.fromkeys(m["signers"] or []))
+        if directed:
+            pairs = [(i, m["sponsor"]) for i in signers if i != m["sponsor"]]
+        else:
+            pairs = [(a, b) for a in signers for b in signers if a != b]
+        for pair in pairs:
+            w[pair] += 1 / c
+            q[pair] += 1
+    return dict(w), q
+
+
+def _connectedness_scores(members, ties: dict) -> dict:
+    """Shortest distances from every deputy i to each j over d_ij = 1/w_ij (Dijkstra on the reversed
+    graph: support flows from the co-signatory to the first signatory). For each j: how many deputies
+    reach it, the sum of their distances, and the sum of the inverse distances."""
+    into = defaultdict(list)
+    for (i, j), wij in ties.items():
+        into[j].append((i, 1 / wij))
+    out = {}
+    for j in members:
+        dist, done, heap = {j: 0.0}, set(), [(0.0, j)]
+        while heap:
+            d, x = heapq.heappop(heap)
+            if x in done:
+                continue
+            done.add(x)
+            for i, dx in into.get(x, ()):
+                if d + dx < dist.get(i, math.inf):
+                    dist[i] = d + dx
+                    heapq.heappush(heap, (d + dx, i))
+        others = [v for k, v in dist.items() if k != j]
+        out[j] = {"reached_by": len(others), "sum_distance": sum(others), "sum_inverse": sum(1 / v for v in others)}
+    return out
+
+
+def _spearman(x: list, y: list) -> float | None:
+    def ranks(v):
+        order, r, i = sorted(range(len(v)), key=v.__getitem__), [0.0] * len(v), 0
+        while i < len(order):
+            k = i
+            while k + 1 < len(order) and v[order[k + 1]] == v[order[i]]:
+                k += 1
+            for t in range(i, k + 1):
+                r[order[t]] = (i + k) / 2 + 1
+            i = k + 1
+        return r
+    return _pearson(ranks(x), ranks(y))
+
+
+def _pearson(x: list, y: list) -> float | None:
+    try:
+        return round(statistics.correlation(x, y), 3) if len(x) > 2 else None
+    except statistics.StatisticsError:  # a constant series
+        return None
+
+
+def _sig(x: float, digits: int = 6) -> float:
+    """Significant figures, not decimals: the scores of a sparse legislature are of order 0.001."""
+    return float(f"{x:.{digits}g}")
+
+
+def _mean_sd(v: list) -> dict:
+    return {"n": len(v), "mean": _sig(statistics.fmean(v), 4) if v else None,
+            "sd": _sig(statistics.stdev(v), 4) if len(v) > 1 else None}
+
+
+def connectedness(legislature: str, who=None, ties="directed", topic=None, measure_type=None, date_from=None,
+                  date_to=None, measure_ids=None, include_truncated=True, top=20, path=None, overwrite=False) -> dict:
+    """Fowler's (2006) legislative connectedness on the co-signature network of one legislature:
+    tie strength from co-signatory to first signatory weighted by the number of co-signatories,
+    distance = 1/strength, shortest paths, and the inverse of the mean distance from the rest of the
+    chamber, corrected for deputies who cannot reach one another (Wasserman and Faust 1994)."""
+    _require()
+    if ties not in ("directed", "undirected"):
+        raise ValueError("ties must be directed or undirected")
+    if not legislature or legislature == "total":
+        raise ValueError("Pick a legislature (1931-1933, 1933-1936, 1936-1939): Fowler builds one network per "
+                         "chamber and Congress, and pooling legislatures mixes deputies who never sat together.")
+    directed = ties == "directed"
+    measures = _measure_signers(legislature, topic, measure_type, date_from, date_to, measure_ids, include_truncated)
+    used = [m for m in measures if m["signatures"] > 1]
+    w, q = _fowler_ties(used, directed)
+    if not w:
+        raise store.NoData("No co-signatures for these measures.")
+    attrs = _node_attrs(legislature)
+    members = sorted(set(attrs) | {x for pair in w for x in pair})
+    n = len(members)
+    raw = _connectedness_scores(members, w)
+    sponsored = Counter(m["sponsor"] for m in measures)
+    cosigned = Counter(i for m in measures for i in set(m["signers"] or []) if i != m["sponsor"])
+    supporters = defaultdict(set)
+    for i, j in w:
+        supporters[j].add(i)
+    rows = {}
+    for j in members:
+        r = raw[j]
+        k, dsum = r["reached_by"], r["sum_distance"]
+        a = attrs.get(j) or {}
+        rows[j] = {"id_dip": j, "name": a.get("nombre_completo"), "party": a.get("partido"),
+                   "family": a.get("familia_partidos"), "district": a.get("distrito"),
+                   # (r/(n−1))·(r/Σd): Fowler's (n−1)/Σd when every other deputy reaches j
+                   "connectedness": _sig(k * k / ((n - 1) * dsum)) if k else 0.0,
+                   "reached_by": k, "full_reach": k == n - 1,
+                   "mean_distance": round(dsum / k, 4) if k else None,
+                   "harmonic": _sig(r["sum_inverse"] / (n - 1)),
+                   "measures_first_signed": sponsored[j], "measures_co_signed": cosigned[j],
+                   ("unique_supporters" if directed else "unique_co_authors"): len(supporters[j]),
+                   "rank": None}
+    ranked = sorted((x for x in rows.values() if x["connectedness"] > 0),
+                    key=lambda x: (-x["connectedness"], -x["harmonic"], x["id_dip"]))
+    for pos, x in enumerate(ranked, 1):
+        x["rank"] = pos
+    scores_all = [x["connectedness"] for x in rows.values()]
+    scores_pos = [x["connectedness"] for x in ranked]
+    strongest = []
+    for (i, j), wij in sorted(((p, v) for p, v in w.items() if directed or p[0] < p[1]),
+                              key=lambda kv: (-kv[1], kv[0]))[:15]:
+        ai, aj = attrs.get(i) or {}, attrs.get(j) or {}
+        strongest.append({("from_co_signatory" if directed else "deputy_a"): {"id_dip": i, "name": ai.get("nombre_completo"),
+                                                                              "party": ai.get("partido")},
+                          ("to_first_signatory" if directed else "deputy_b"): {"id_dip": j, "name": aj.get("nombre_completo"),
+                                                                               "party": aj.get("partido")},
+                          "weight": round(wij, 4), "measures": q[(i, j)],
+                          "same_party": bool(ai.get("partido")) and ai.get("partido") == aj.get("partido"),
+                          "same_family": bool(ai.get("familia_partidos")) and
+                          ai.get("familia_partidos") == aj.get("familia_partidos"),
+                          "same_district": bool(ai.get("distrito")) and ai.get("distrito") == aj.get("distrito")})
+    filtered = bool(topic or measure_type or date_from or date_to or measure_ids or not include_truncated)
+    out = {"legislature": legislature, "ties": ties,
+           "summary": {"members": n, "deputies_with_ties": len({x for pair in w for x in pair}),
+                       "deputies_reached": len(ranked), "deputies_with_full_reach": sum(x["full_reach"] for x in rows.values()),
+                       "measures": len(measures), "measures_used": len(used),
+                       "measures_without_co_signatories": len(measures) - len(used),
+                       "measures_with_truncated_lists_used": sum(1 for m in used if m["truncated"]),
+                       "ties": len(w) if directed else len(w) // 2,
+                       "connectedness_all_members": _mean_sd(scores_all),
+                       "connectedness_reached_deputies": _mean_sd(scores_pos)},
+           "ranking": ranked[:top], "strongest_ties": strongest}
+    if not filtered:
+        # the published centralities of the same legislature (Fowler's Table 6 compares them the same way)
+        have = {r["column_name"] for r in _q("SELECT column_name FROM (DESCRIBE ae_metrics)")}
+        metrics = [c for c in ("closeness", "betweenness_pct", "eigenvector", "degree", "strength", "influence_score")
+                   if c in have]
+        pub = {r["id_dip"]: r for r in _q(f"SELECT id_dip, {', '.join(metrics)} FROM ae_metrics WHERE period = ?",
+                                          [legislature])}
+        corr = {}
+        for metric in metrics:
+            both = [(rows[j]["connectedness"], pub[j][metric]) for j in members
+                    if j in pub and pub[j][metric] is not None]
+            pos = [(c, v) for c, v in both if c > 0]
+            corr[metric] = {"pearson_all": _pearson(*zip(*both)) if both else None,
+                            "spearman_all": _spearman(*map(list, zip(*both))) if both else None,
+                            "pearson_reached": _pearson(*zip(*pos)) if pos else None,
+                            "spearman_reached": _spearman(*map(list, zip(*pos))) if pos else None,
+                            "n_all": len(both), "n_reached": len(pos)}
+        out["correlation_with_published_metrics"] = corr
+    if who is not None:
+        d = resolve_deputy(who)
+        me = rows.get(d["id_dip"])
+        if me is None:
+            raise LookupError(f"{d['name']} ({d['id_dip']}) was not a member of the {legislature} legislature.")
+        near = sorted(((i, wij) for (i, j), wij in w.items() if j == d["id_dip"]), key=lambda t: (-t[1], t[0]))
+        out["deputy"] = {**me, "of_reached": len(ranked),
+                         ("closest_supporters" if directed else "closest_co_authors"): [
+                             {"id_dip": i, "name": rows[i]["name"], "party": rows[i]["party"], "weight": round(wij, 4),
+                              "measures": q[(i, d["id_dip"])], "their_rank": rows[i]["rank"]} for i, wij in near[:15]]}
+    if path:
+        out["files"] = _write_connectedness(path, members, rows, w, q, directed, overwrite)
+    out["filters"] = {k: v for k, v in dict(topic=topic, measure_type=measure_type, date_from=date_from, date_to=date_to,
+                                            measure_ids=measure_ids, include_truncated=include_truncated).items()
+                      if v not in (None, "")}
+    out["datasets"] = _version_note()
+    out["method"] = [
+        ("Directed ties, as in Fowler (2006): each co-signatory i supports the first signatory j of a measure ℓ. "
+         "Strength w_ij = Σ_ℓ 1/c_ℓ, with c_ℓ the measure's co-signatories, so a tie made on a short list weighs more "
+         "than one made on a long list.") if directed else
+        ("Undirected ties (Newman 2001, the weighting Fowler adapts): every pair of signatories of a measure ℓ, "
+         "w_ij = w_ji = Σ_ℓ 1/(k_ℓ − 1), with k_ℓ the measure's signatories."),
+        "Distance d_ij = 1/w_ij; shortest paths by Dijkstra. Connectedness_j = (n − 1)/Σ_i d_ij (Fowler), with n the "
+        "members of the legislature in the register.",
+        "Few deputies can be reached by every other member (deputies_with_full_reach), so the score is Fowler's corrected "
+        "for reach (Wasserman and Faust 1994; Lin 1976): (r_j/(n − 1))·(r_j/Σ d_ij) over the r_j deputies who reach j. "
+        "It is exactly Fowler's when r_j = n − 1. 'harmonic' = Σ (1/d_ij)/(n − 1) is a robustness check that needs no "
+        "correction.",
+        "c_ℓ counts every signature, also the illegible ones (they make no tie) and, for truncated lists, the N of "
+        "'Siguen las firmas hasta N'. Measures with a single signature make no tie.",
+    ]
+    out["notes"] = [
+        "Computed here from the signatures, not published by Afinidades Elegidas.",
+        "The first signatory stands for Fowler's sponsor. In Afinidades v3 the first signature is always the measure's "
+        "id_dip_primer_autor, the order is almost never alphabetical (6 of 1,338 lists of four or more), and the "
+        "defender on the floor is the first signatory in 85% of the defended measures (668 of 782).",
+        ("With directed ties a deputy who never signed first, or whose measures nobody else signed, receives no "
+         "support: connectedness 0 and no rank. Compare means over reached deputies, not only over all members.")
+        if directed else "With undirected ties every co-signatory can be reached.",
+        "Truncated signature lists miss some ties (their weight is still divided by the declared total): scores are "
+        "a lower bound for the deputies who signed them.",
+    ]
+    if not filtered:
+        out["notes"].append("correlation_with_published_metrics compares the score with the published centralities "
+                            "of the same legislature (as Fowler's Table 6). Afinidades has no record of amendments "
+                            "passed, so this is not Fowler's test of external validity.")
+    out["cite"] = [FOWLER] + ([] if directed else [NEWMAN])
+    return out
+
+
+def _write_connectedness(path, members, rows, w, q, directed, overwrite) -> list[str]:
+    from xml.sax.saxutils import escape
+    out = Path(path).expanduser()
+    if not out.is_absolute():
+        out = Path.cwd() / out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    keys = ("name", "party", "family", "district", "connectedness", "rank", "reached_by", "mean_distance", "harmonic",
+            "measures_first_signed", "measures_co_signed")
+    if out.suffix.lower() == ".graphml":
+        targets = [out]
+    elif out.suffix.lower() == ".csv":
+        targets = [out.with_name(out.stem + "_deputies.csv"), out.with_name(out.stem + "_ties.csv")]
+    else:
+        raise ValueError("path must end in .graphml (Gephi, igraph, networkx) or .csv (deputies + ties files)")
+    for t in targets:
+        if t.exists() and not overwrite:
+            raise FileExistsError(f"{t} already exists; pass overwrite=true to replace it")
+    pairs = [(i, j) for (i, j) in sorted(w) if directed or i < j]
+    if out.suffix.lower() == ".graphml":
+        types = {"connectedness": "double", "mean_distance": "double", "harmonic": "double", "rank": "int",
+                 "reached_by": "int", "measures_first_signed": "int", "measures_co_signed": "int"}
+        lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<graphml xmlns="http://graphml.graphdrawing.org/xmlns">']
+        lines += [f'  <key id="{k}" for="node" attr.name="{k}" attr.type="{types.get(k, "string")}"/>' for k in keys]
+        lines += ['  <key id="weight" for="edge" attr.name="weight" attr.type="double"/>',
+                  '  <key id="measures" for="edge" attr.name="measures" attr.type="int"/>',
+                  f'  <graph id="G" edgedefault="{"directed" if directed else "undirected"}">']
+        for x in members:
+            data = "".join(f'<data key="{k}">{escape(str(rows[x][k]))}</data>' for k in keys if rows[x][k] is not None)
+            lines.append(f'    <node id="{x}">{data}</node>')
+        for i, j in pairs:
+            lines.append(f'    <edge source="{i}" target="{j}"><data key="weight">{w[(i, j)]:.6f}</data>'
+                         f'<data key="measures">{q[(i, j)]}</data></edge>')
+        lines += ["  </graph>", "</graphml>"]
+        out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    else:
+        import csv as _csv
+        with open(targets[0], "w", newline="", encoding="utf-8") as fh:
+            wr = _csv.writer(fh)
+            wr.writerow(["id_dip", *keys])
+            for x in members:
+                wr.writerow([x, *["" if rows[x][k] is None else rows[x][k] for k in keys]])
+        with open(targets[1], "w", newline="", encoding="utf-8") as fh:
+            wr = _csv.writer(fh)
+            wr.writerow(["source", "target", "weight", "distance", "measures"])
+            for i, j in pairs:
+                wr.writerow([i, j, round(w[(i, j)], 6), round(1 / w[(i, j)], 6), q[(i, j)]])
+    return [str(t) for t in targets]
 
 
 # ── metrics and roles (published, not recomputed) ─────────────────────────────
