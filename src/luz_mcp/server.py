@@ -8,7 +8,7 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from . import profile  # noqa: F401  (activates the Luz profile before the engine is used)
-from . import __version__, afinidades as ae, data
+from . import __version__, afinidades as ae, data, groups
 from parlaibero_mcp import analysis, library as libmod, networks, server as S, store
 from parlaibero_mcp.server import Server, Tools, make_before
 
@@ -26,9 +26,10 @@ How to work with it:
    (`library_create` …) to work on a subset; `query_sql` for anything else (schema: `describe_data`).
 3. Measures and network: `search_measures`, `get_measure` (with the debate where it was read and
    defended), `coauthorship_network`, `deputy_neighbors`, `cross_group_coauthorship`,
-   `network_metrics`, `structural_roles`, `connectedness` (Fowler 2006), `deputy_profile`, and
-   `speech_by_network`, which saves the speeches of each network role as a library so the text tools
-   can compare them.
+   `network_metrics`, `structural_roles`, `connectedness` (Fowler 2006), `brokerage_roles`
+   (Gould-Fernandez), `transpartisan_cosigning`, `homophily`, `block_density`, `assortativity`,
+   `deputy_profile`, and `speech_by_network`, which saves the speeches of each network role as a
+   library so the text tools can compare them.
 4. There is NO sex variable in either dataset: nothing can be broken down by sex.
 5. speaker = SUMARIO (session summary, order 0) and COMENTARIOS (documents read out, votes, the
    Diario's narration) are not speech: dm_speech = 0. Filter dm_speech = 1 to study what was said.
@@ -36,8 +37,10 @@ How to work with it:
    and `reg_party`, `reg_family`, `reg_ideology` from the Afinidades register (revised). Compare
    voice with seats (share_of_voice) only with the reg_* labels, which the register of members shares.
 7. The legislature labels differ: Luz says 1933-1935, Afinidades 1933-1936 (the same legislature).
-8. Network metrics and roles are the published ones, not recomputed; only `connectedness` is computed
-   here, from the signatures (the first signatory stands for Fowler's sponsor). Topic, title and defence of
+8. Network metrics and roles are the published ones, not recomputed. Computed here from the signatures,
+   one network per legislature: `connectedness`, `brokerage_roles`, `transpartisan_cosigning`,
+   `homophily`, `block_density`, `assortativity` (the first signatory stands for the sponsor; there is
+   no gender, race or committee variable). Topic, title and defence of
    each measure were assigned with language models and human review. Some signature lists are
    truncated in the Diario, so their edges are missing.
 9. Networks on a library: `cooccurrence_network` (entities mentioned in the same intervention, by whom)
@@ -53,7 +56,8 @@ LOGGED = {"query_sql", "search_text", "term_frequency", "ngram_viewer", "term_co
           "get_intervention", "library_create", "library_edit", "library_combine", "library_describe",
           "library_delete", "library_rebuild", "library_export", "library_import", "search_measures",
           "get_measure", "coauthorship_network", "deputy_neighbors", "cross_group_coauthorship",
-          "network_metrics", "structural_roles", "connectedness", "speech_by_network", "deputy_profile",
+          "network_metrics", "structural_roles", "connectedness", "brokerage_roles", "transpartisan_cosigning",
+          "homophily", "block_density", "assortativity", "speech_by_network", "deputy_profile",
           "cooccurrence_network", "mention_network"}
 
 _server = Server(name="luz", instructions=INSTRUCTIONS)
@@ -481,6 +485,107 @@ def connectedness(
     closest supporters, and the correlation with the published centralities."""
     return ae.connectedness(legislature, who, ties, topic, measure_type, date_from, date_to, measure_ids,
                             include_truncated, top, path, overwrite)
+
+
+NetLegislature = Annotated[Literal["1931-1933", "1933-1936", "1936-1939"], Field(
+    description="Legislature: one network each (membership and labels change between them)")]
+GroupKey = Annotated[Literal["party", "family", "ideology", "region", "district"], Field(
+    description="Groups of the Afinidades register for that legislature; region = the historical region of "
+                "the district")]
+Ties = Annotated[Literal["undirected", "directed"], Field(
+    description="undirected: every pair of signatories of a measure; directed: co-signatory → first signatory")]
+MinWeight = Annotated[int, Field(ge=1, description="A tie needs at least this many measures signed together")]
+MeasureType = Annotated[str | None, Field(description="Type of measure (ILIKE)")]
+MeasureIds = Annotated[list[int] | None, Field(description="Only these measures")]
+Truncated = Annotated[bool, Field(description="Include measures whose signature list is truncated")]
+CsvPath = Annotated[str | None, Field(description="Write the full table to this .csv")]
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def brokerage_roles(
+    legislature: NetLegislature, by: GroupKey = "party",
+    who: Annotated[str | None, Field(description="A deputy (id or name): all their counts")] = None,
+    top: Annotated[int, Field(ge=1, le=200, description="Deputies listed per role")] = 10,
+    topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
+    measure_ids: MeasureIds = None, include_truncated: Truncated = True, min_weight: MinWeight = 1,
+    path: CsvPath = None, overwrite: bool = False,
+) -> dict:
+    """Gould and Fernandez's (1989) brokerage roles on the support network (co-signatory → first
+    signatory): coordinator, consultant (itinerant), representative, gatekeeper and liaison, by the
+    groups of the two deputies a broker connects. Counts, expected values and z under their random
+    network, shares against the shares random labels would give, by group and the top brokers."""
+    return groups.brokerage_roles(legislature, by, who, top, topic, measure_type, date_from, date_to, measure_ids,
+                                  include_truncated, min_weight, path, overwrite)
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def transpartisan_cosigning(
+    legislature: Legislature = None, by: GroupKey = "party",
+    threshold: Annotated[float, Field(gt=0, le=1, description="A measure is transpartisan when at least this share "
+                                                               "of its co-signatories is from other groups")] = 0.2,
+    who: Annotated[str | None, Field(description="A deputy (needs a legislature)")] = None,
+    top: Annotated[int, Field(ge=1, le=500)] = 20,
+    min_measures: Annotated[int, Field(ge=0, description="Deputies in the rankings signed at least this many")] = 5,
+    topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
+    include_truncated: Truncated = True, path: CsvPath = None, overwrite: bool = False,
+) -> dict:
+    """Co-signing across parties, families, ideologies or regions (in the spirit of Harbridge's 2015
+    bipartisan cosponsorship): the share of co-signature dyads that cross groups, for the chamber
+    (each legislature, by type and topic) and for each deputy as co-signatory, as first signatory
+    and over all pairs; and each measure's coalition (groups, share from other groups, span)."""
+    return groups.transpartisan_cosigning(legislature, by, threshold, who, top, min_measures, topic, measure_type,
+                                          date_from, date_to, include_truncated, path, overwrite)
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def homophily(
+    legislature: NetLegislature, ties: Ties = "undirected", min_weight: MinWeight = 1,
+    permutations: Annotated[int, Field(ge=0, le=2000, description="QAP permutations (0 = none)")] = 200,
+    seed: int = 1,
+    topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
+    measure_ids: MeasureIds = None, include_truncated: Truncated = True,
+    path: Annotated[str | None, Field(description="Write every dyad with its tie and attributes to this .csv "
+                                                  "(for an ERGM or QAP in R)")] = None,
+    overwrite: bool = False,
+) -> dict:
+    """Dyadic homophily: the probability that two deputies co-sign given that they share party,
+    family, ideology, district or region, against when they do not (odds ratio, QAP p-value), and
+    a dyadic logit of the tie on all of them with the deputies' activity held fixed. The data have
+    no gender, race or committee variable."""
+    return groups.homophily(legislature, ties, min_weight, permutations, seed, topic, measure_type, date_from,
+                            date_to, measure_ids, include_truncated, path, overwrite)
+
+
+@mcp.tool(annotations=WRITE_LOCAL)
+def block_density(
+    legislature: NetLegislature, by: GroupKey = "family", ties: Ties = "undirected",
+    weighted: Annotated[bool, Field(description="Mean measures signed together per dyad instead of the share of "
+                                                "dyads tied")] = False,
+    min_weight: MinWeight = 1,
+    topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
+    measure_ids: MeasureIds = None, include_truncated: Truncated = True, path: CsvPath = None,
+    overwrite: bool = False,
+) -> dict:
+    """Density of co-signature ties within and between groups (the blockmodel image, as in Alemán and
+    Calvo 2013): ties over possible dyads among all members, the image matrix at the overall
+    density, within- against between-group density, and the densest pairs of groups."""
+    return groups.block_density(legislature, by, ties, weighted, min_weight, topic, measure_type, date_from, date_to,
+                                measure_ids, include_truncated, path, overwrite)
+
+
+@mcp.tool(annotations=READ)
+def assortativity(
+    legislature: NetLegislature, by: GroupKey = "party", ties: Ties = "undirected",
+    weighted: Annotated[bool, Field(description="Count each tie as many times as measures signed together")] = False,
+    min_weight: MinWeight = 1,
+    topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
+    measure_ids: MeasureIds = None, include_truncated: Truncated = True,
+) -> dict:
+    """Newman's (2003) nominal assortativity of the co-signature network by group (−1 to 1, with a
+    jackknife standard error and its minimum), each group's within-group share against random
+    mixing, and the scalar assortativity of ideological position."""
+    return groups.assortativity(legislature, by, ties, weighted, min_weight, topic, measure_type, date_from, date_to,
+                                measure_ids, include_truncated)
 
 
 # ── speech × network ──────────────────────────────────────────────────────────

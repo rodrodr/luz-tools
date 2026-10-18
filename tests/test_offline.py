@@ -3,6 +3,8 @@
 end-to-end run described in the README."""
 import csv
 import json
+import math
+from collections import Counter
 
 import pytest
 
@@ -247,3 +249,47 @@ def test_connectedness_on_the_data(home, tmp_path):
         ae.connectedness("total")
     with pytest.raises(LookupError, match="not a member"):
         ae.connectedness("1931-1933", who="Dani")
+
+
+def test_brokerage_roles_by_hand():
+    from luz_mcp import groups as G
+    party = {1: "A", 2: "A", 3: "A", 5: "B", 6: "B", 7: "C"}
+    net = {"members": sorted(party), "attrs": {x: {"partido": g} for x, g in party.items()},
+           "directed": {(1, 2): 1, (5, 2): 1, (7, 2): 1, (2, 3): 1, (2, 6): 1, (1, 3): 1}}
+    # through 2: 1→3 is closed (no coordination); 1→6 representative; 5→3, 7→3 gatekeeper; 5→6 consultant;
+    # 7→6 liaison
+    assert G._gf_counts(net, "party")[2] == {"representative": 1, "gatekeeper": 2, "consultant": 1, "liaison": 1}
+    ev = G._gf_expectations(Counter(party.values()), "A", 6, 0.2)
+    assert sum(ev[r][0] for r in G.ROLES) == pytest.approx(ev["total"][0])   # the five roles exhaust the triples
+
+
+def test_assortativity_and_logit_by_hand():
+    from luz_mcp import groups as G
+    cliques = [("A", "A", 1.0)] * 3 + [("B", "B", 1.0)] * 3
+    assert G._assortativity(cliques, directed=False)["r"] == pytest.approx(1.0)
+    bipartite = [("A", "B", 1.0)] * 4
+    a = G._assortativity(bipartite, directed=False)
+    assert a["r"] == pytest.approx(-1.0) and a["r_min"] == pytest.approx(-1.0)
+    fit = G._logit([([1.0, 0.0], 100, 10), ([1.0, 1.0], 100, 50)], ["intercept", "x"])["terms"]
+    assert fit[0]["coef"] == pytest.approx(math.log(10 / 90), abs=1e-4)
+    assert fit[1]["odds_ratio"] == pytest.approx(9.0, abs=1e-3)
+
+
+def test_group_measures_on_the_data(home, tmp_path):
+    from luz_mcp import groups as G
+    t = G.transpartisan_cosigning(by="party")                        # measure 10: PSOE first, PRRS co-signs
+    assert [c["pair_cross_share"] for c in t["chamber"][:2]] == [1.0, 1.0]
+    assert t["chamber"][1]["unlabelled_signatures"] == 3             # one illegible + two unprinted (declared 5)
+    t = G.transpartisan_cosigning("1931-1933", who="Ana", min_measures=0, path=str(tmp_path / "t.csv"))
+    d = t["deputy"]                                                  # PSOE: 2 of the 4 members
+    assert (d["pair_cross_share"], d["baseline_cross_share"], d["cross_excess"]) == (1.0, 0.667, 0.333)
+    assert t["most_transpartisan"] == [] and len(t["files"]) == 1    # groups of fewer than 3 are not ranked
+    h = G.homophily("1931-1933", permutations=10)
+    assert (h["summary"]["dyads"], h["summary"]["ties"]) == (6, 1)
+    assert h["univariate"]["party"]["same_dyads"] == 1               # Ana Uno and Presi Dente (PSOE)
+    b = G.block_density("1931-1933", by="party")
+    assert b["density"]["PSOE"]["PRRS"] == 0.5 and b["density"]["PRRS"]["PRRS"] is None   # a group of one
+    assert G.assortativity("1931-1933")["r"] == -1.0                 # the only tie crosses parties
+    assert G.brokerage_roles("1931-1933")["summary"]["brokers"] == 0
+    with pytest.raises(ValueError, match="legislature"):
+        G.block_density("total")

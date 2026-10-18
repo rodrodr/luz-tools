@@ -9,6 +9,17 @@
   de la Cámara, con la corrección de Wasserman y Faust para el alcance incompleto. Ranking, vínculos más
   fuertes, los apoyos más cercanos de un diputado, correlación con las centralidades publicadas y
   exportación a CSV o GraphML. Opción no dirigida con la ponderación de Newman (2001).
+- Cinco medidas de grupos en la red, calculadas desde las firmas, una red por legislatura, con los grupos del
+  registro (partido, familia, ideología, distrito o región histórica):
+  - `brokerage_roles`: roles de intermediación de Gould y Fernandez (1989) en la red de apoyo (coordinador,
+    consultor, representante, guardián, enlace), con valores esperados y z de su modelo nulo. Recuentos,
+    esperados y z comprobados contra `sna::brokerage` de R.
+  - `transpartisan_cosigning`: cofirma entre grupos como indicador diádico agregado al diputado y a la cámara
+    (en la línea de Harbridge 2015), más la coalición de cada medida. Reproduce 1 − `party_frac_partido`.
+  - `homophily`: probabilidad de vínculo condicionada a compartir atributos, con QAP y logit diádico con
+    efectos fijos de actividad; exporta las díadas para un ERGM.
+  - `block_density`: densidades intra- e interbloque, imagen al umbral de la densidad global (Alemán y Calvo 2013).
+  - `assortativity`: asortatividad nominal de Newman (2003) con error típico jackknife, y la escalar de la ideología.
 
 ## 0.2.0 · 2026-10-14 · publicada en PyPI
 

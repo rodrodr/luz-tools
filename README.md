@@ -97,6 +97,10 @@ uvx luz-mcp download
   `cross_group_coauthorship`
 - *«¿Quiénes reciben el apoyo más estrecho de sus colegas en las Constituyentes, y quién los apoya?»*:
   `connectedness`
+- *«¿Quién hace de puente entre partidos al firmar iniciativas, y qué parte de las cofirmas cruza de
+  partido en cada legislatura?»*: `brokerage_roles` y `transpartisan_cosigning`
+- *«¿Firman más juntos los diputados del mismo distrito que los del mismo partido? ¿Cuánto se cierra
+  cada familia sobre sí misma?»*: `homophily`, `block_density` y `assortativity`
 - *«¿Hablan distinto en el pleno los diputados que articulan la red y los que se quedan en su
   partido?»*: `speech_by_network` y `distinctive_words`
 - *«En los debates de la reforma agraria, ¿qué instituciones y conceptos aparecen juntos, y cuáles
@@ -113,6 +117,7 @@ uvx luz-mcp download
 | medidas | `search_measures` · `get_measure` |
 | red | `coauthorship_network` (exporta GraphML o CSV para Gephi, igraph o R) · `deputy_neighbors` · `cross_group_coauthorship` |
 | métricas | `network_metrics` · `structural_roles` (las publicadas, sin recalcular) · `connectedness` (Fowler 2006, calculada aquí desde las firmas; exporta CSV o GraphML) |
+| grupos en la red | `brokerage_roles` (roles de Gould y Fernandez) · `transpartisan_cosigning` (cofirma entre partidos, familias o regiones) · `homophily` (homofilia diádica, con QAP) · `block_density` (densidades intra- e interbloque e imagen) · `assortativity` (asortatividad nominal de Newman). Calculadas aquí desde las firmas, una red por legislatura |
 | discurso × red | `speech_by_network` · `deputy_profile` |
 | redes sobre una biblioteca | `cooccurrence_network` (entidades mencionadas en la misma intervención) · `mention_network` (quién nombra a quién en el pleno). Escriben una página HTML interactiva, CSV, JSON y un resumen en la carpeta absoluta que se indique; el método está en el recurso `luz://methods/networks` |
 | reproducibilidad | `query_sql` (SQL de solo lectura) · `export_result` · `query_log` |
@@ -140,6 +145,26 @@ uvx luz-mcp download
   corrección de Wasserman y Faust, que coincide con la de Fowler cuando el alcance es completo. Quien
   nunca firmó primero, o cuyas medidas nadie más firmó, no recibe apoyo y puntúa 0.
   `ties="undirected"` usa la ponderación de Newman (2001) entre todos los firmantes.
+- **Las medidas de grupo también se calculan aquí,** sobre dos redes hechas con las mismas medidas: la
+  no dirigida (cada par de firmantes, que es la lista de aristas publicada) y la dirigida (del cofirmante
+  al primer firmante). Los grupos son los del registro para esa legislatura: partido, familia, ideología,
+  distrito o región histórica (la que Afinidades asigna a cada distrito; Ceuta y Melilla quedan cada una
+  como la suya). Las definiciones se han comprobado contra lo publicado: la cofirma entre partidos de
+  cada diputado es exactamente 1 − `party_frac_partido`, y los roles de Gould y Fernandez coinciden con
+  la función `brokerage` del paquete `sna` de R.
+  - `brokerage_roles` cuenta los caminos abiertos a → b → c de la red de apoyo. Los z siguen el modelo
+    nulo de Gould y Fernandez (1989), una red aleatoria de la misma densidad, que no descuenta la
+    actividad y supone vínculos independientes: léanse como orden más que como significación. No son los
+    seis roles publicados por Afinidades.
+  - `transpartisan_cosigning` es un indicador diádico agregado al diputado y a la cámara, en la línea de
+    Harbridge (2015). El umbral que convierte una medida en transpartidista es un parámetro de esta
+    herramienta (0,2 por defecto), no una cifra tomada de Harbridge. Los rankings de diputados ordenan por
+    el exceso sobre lo que obliga el tamaño de su grupo y dejan fuera los grupos de menos de tres.
+  - `homophily` estima la probabilidad de vínculo entre dos diputados según compartan partido, familia,
+    ideología, distrito o región, con pruebas QAP y un logit diádico que fija la actividad de ambos. Los
+    errores típicos del logit son ingenuos; para un modelo completo se exportan las díadas y se ajusta un
+    ERGM. **No hay variables de género, raza ni comisión,** así que la homofilia por ellas no se puede
+    estimar.
 - **Algunas listas de firmas están truncadas en el Diario,** y a esas medidas les faltan aristas.
 - **`mention_network` no puede separar homónimos por sexo,** porque no hay variable de sexo. Los separa
   por el nombre de pila o el partido escritos junto al apellido; lo que sigue siendo ambiguo se lista
@@ -231,6 +256,10 @@ The tools are listed in the table above. What to keep in mind:
   first signatory with strength 1/(co-signatories) per measure, distance = 1/strength, one network per
   legislature, corrected for deputies who cannot reach one another (Wasserman and Faust; equal to
   Fowler's when reach is complete). The first signatory stands for the sponsor.
+- **The group measures are computed here too:** `brokerage_roles` (Gould and Fernandez; checked against
+  R's `sna`), `transpartisan_cosigning` (dyadic, after Harbridge 2015; its threshold is this tool's
+  parameter), `homophily` (dyadic, with QAP), `block_density` and `assortativity` (Newman). There is no
+  gender, race or committee variable.
 - **Some signature lists are truncated.**
 - **The chair is left out of `speech_by_network` by default.** It signs no initiatives but speaks
   in every sitting.
