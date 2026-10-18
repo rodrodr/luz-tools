@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 · sin publicar
+## 0.3.0 · 2026-10-18 · publicada en PyPI
 
 - `connectedness`: la medida de *legislative connectedness* de Fowler (2006, *Political Analysis* 14: 456-487),
   calculada desde las firmas de Afinidades, una red por legislatura. Fuerza del vínculo del cofirmante al
