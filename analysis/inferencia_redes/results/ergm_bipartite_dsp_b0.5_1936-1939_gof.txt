@@ -1,0 +1,21 @@
+
+Goodness-of-fit for model statistics 
+
+                           obs       min      mean       max MC p-value
+b1nodematch.party     859.5355  796.8151  861.7293  938.4789       0.94
+b1nodematch.family    976.0218  900.7759  970.7304 1025.9185       0.84
+b1nodematch.district  295.8632  270.4899  304.7670  331.8099       0.42
+b1nodematch.region    539.4564  508.1293  552.1702  588.7184       0.46
+b1nodematch.ideology 1083.4550 1013.9302 1075.0275 1136.2733       0.72
+gwb1dsp.fixed.0.5    5562.5718 5491.0595 5664.5851 5794.9000       0.06
+
+Goodness-of-fit for user statistics 
+
+         obs   min     mean   max MC p-value
+b1dsp0 45820 45486 45675.60 45913       0.08
+b1dsp1  4418  4290  4651.98  4971       0.12
+b1dsp2   639   501   591.47   670       0.28
+b1dsp3   136    52   103.02   165       0.08
+b1dsp4    22     4    15.83    37       0.36
+b1dsp5     4     0     1.90     7       0.34
+b1dsp6     1     0     0.20     2       0.36

@@ -1,0 +1,160 @@
+{
+ "summary": {
+  "members": 475,
+  "deputies_who_signed": 454,
+  "dyads": 102831,
+  "ties": 16361,
+  "density": 0.15911,
+  "permutations": 1000
+ },
+ "univariate": {
+  "party": {
+   "groups": 24,
+   "same_dyads": 12624,
+   "same_ties": 4482,
+   "p_tie_same": 0.355,
+   "different_dyads": 90207,
+   "different_ties": 11879,
+   "p_tie_different": 0.1317,
+   "relative_risk": 2.696,
+   "odds_ratio": 3.63,
+   "qap_p": 0.001
+  },
+  "family": {
+   "groups": 11,
+   "same_dyads": 18198,
+   "same_ties": 6204,
+   "p_tie_same": 0.3409,
+   "different_dyads": 84633,
+   "different_ties": 10157,
+   "p_tie_different": 0.12,
+   "relative_risk": 2.841,
+   "odds_ratio": 3.793,
+   "qap_p": 0.001
+  },
+  "ideology": {
+   "groups": 6,
+   "same_dyads": 24655,
+   "same_ties": 6728,
+   "p_tie_same": 0.2729,
+   "different_dyads": 78176,
+   "different_ties": 9633,
+   "p_tie_different": 0.1232,
+   "relative_risk": 2.215,
+   "odds_ratio": 2.67,
+   "qap_p": 0.001
+  },
+  "district": {
+   "groups": 53,
+   "same_dyads": 2505,
+   "same_ties": 1067,
+   "p_tie_same": 0.4259,
+   "different_dyads": 100326,
+   "different_ties": 15294,
+   "p_tie_different": 0.1524,
+   "relative_risk": 2.794,
+   "odds_ratio": 4.125,
+   "qap_p": 0.001
+  },
+  "region": {
+   "groups": 17,
+   "same_dyads": 9878,
+   "same_ties": 2833,
+   "p_tie_same": 0.2868,
+   "different_dyads": 92953,
+   "different_ties": 13528,
+   "p_tie_different": 0.1455,
+   "relative_risk": 1.971,
+   "odds_ratio": 2.361,
+   "qap_p": 0.001
+  }
+ },
+ "qap_p_floor": 0.001,
+ "logit": {
+  "terms": [
+   {
+    "term": "intercept",
+    "coef": -3.4904,
+    "se_naive": 0.051,
+    "odds_ratio": 0.03,
+    "separation": false
+   },
+   {
+    "term": "same_party",
+    "coef": 0.7799,
+    "se_naive": 0.0396,
+    "odds_ratio": 2.181,
+    "separation": false
+   },
+   {
+    "term": "same_family",
+    "coef": 0.3951,
+    "se_naive": 0.0376,
+    "odds_ratio": 1.485,
+    "separation": false
+   },
+   {
+    "term": "same_district",
+    "coef": 0.8785,
+    "se_naive": 0.0571,
+    "odds_ratio": 2.407,
+    "separation": false
+   },
+   {
+    "term": "same_region",
+    "coef": 0.7538,
+    "se_naive": 0.0334,
+    "odds_ratio": 2.125,
+    "separation": false
+   },
+   {
+    "term": "ideology_distance",
+    "coef": -0.4287,
+    "se_naive": 0.0122,
+    "odds_ratio": 0.651,
+    "separation": false
+   },
+   {
+    "term": "activity low-mid",
+    "coef": 0.6918,
+    "se_naive": 0.0538,
+    "odds_ratio": 1.997,
+    "separation": false
+   },
+   {
+    "term": "activity low-high",
+    "coef": 1.4459,
+    "se_naive": 0.0515,
+    "odds_ratio": 4.246,
+    "separation": false
+   },
+   {
+    "term": "activity mid-mid",
+    "coef": 1.8118,
+    "se_naive": 0.0557,
+    "odds_ratio": 6.122,
+    "separation": false
+   },
+   {
+    "term": "activity mid-high",
+    "coef": 2.7006,
+    "se_naive": 0.0499,
+    "odds_ratio": 14.888,
+    "separation": false
+   },
+   {
+    "term": "activity high-high",
+    "coef": 3.6943,
+    "se_naive": 0.0516,
+    "odds_ratio": 40.219,
+    "separation": false
+   }
+  ],
+  "reference_activity": "activity low-low",
+  "activity_cuts": {
+   "low": "≤ 6 measures",
+   "mid": "≤ 13",
+   "high": "> 13"
+  }
+ }
+}

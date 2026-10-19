@@ -1,0 +1,34 @@
+legislature,term,coef,p_mrqap,reps,chunks
+1931-1933,activity high-high,3.6943,0.0,1000,4
+1931-1933,activity low-high,1.4459,0.0,1000,4
+1931-1933,activity low-mid,0.6918,0.0,1000,4
+1931-1933,activity mid-high,2.7006,0.0,1000,4
+1931-1933,activity mid-mid,1.8118,0.0,1000,4
+1931-1933,ideology_distance,-0.4287,0.0,1000,4
+1931-1933,intercept,-3.4904,0.0,1000,4
+1931-1933,same_district,0.8785,0.0,1000,4
+1931-1933,same_family,0.3951,0.0,1000,4
+1931-1933,same_party,0.7799,0.0,1000,4
+1931-1933,same_region,0.7538,0.0,1000,4
+1933-1936,activity high-high,2.8867,0.0,1000,4
+1933-1936,activity low-high,1.2421,0.0,1000,4
+1933-1936,activity low-mid,0.74,0.0,1000,4
+1933-1936,activity mid-high,2.1363,0.0,1000,4
+1933-1936,activity mid-mid,1.4964,0.0,1000,4
+1933-1936,ideology_distance,-0.5733,0.0,1000,4
+1933-1936,intercept,-2.8441,0.0,1000,4
+1933-1936,same_district,1.5098,0.0,1000,4
+1933-1936,same_family,0.31,0.0,1000,4
+1933-1936,same_party,0.6809,0.0,1000,4
+1933-1936,same_region,0.5605,0.0,1000,4
+1936-1939,activity high-high,3.4717,0.0,1000,4
+1936-1939,activity low-high,1.2725,0.0,1000,4
+1936-1939,activity low-mid,0.7812,0.0,1000,4
+1936-1939,activity mid-high,2.5332,0.0,1000,4
+1936-1939,activity mid-mid,1.7175,0.0,1000,4
+1936-1939,ideology_distance,-0.8466,0.0,1000,4
+1936-1939,intercept,-3.0168,0.0,1000,4
+1936-1939,same_district,0.4675,0.0,1000,4
+1936-1939,same_family,-0.1943,0.06,1000,4
+1936-1939,same_party,0.6224,0.0,1000,4
+1936-1939,same_region,0.3374,0.0,1000,4

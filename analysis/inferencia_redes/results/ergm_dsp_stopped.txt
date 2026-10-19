@@ -1,0 +1,2 @@
+1931-1933: stopped at MCMLE iteration 4 of 40 after about 75 minutes; Hummel step lengths 0.0650 0.0716 0.0794 (1 = full step)
+1933-1936: stopped at MCMLE iteration 4 of 40 after about 75 minutes; Hummel step lengths 0.0625 0.0779 0.0810 (1 = full step)
