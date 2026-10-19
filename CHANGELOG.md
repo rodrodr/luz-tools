@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 · sin publicar
+## 0.4.0 · 2026-10-19 · publicada en PyPI
 
 - `transpartisan_cosigning` (**cambia la interfaz**: desaparece `threshold`): cada medida es unipartidista,
   bipartidista o multipartidista según el número efectivo de partidos (NEP, Laakso y Taagepera 1979) de sus
