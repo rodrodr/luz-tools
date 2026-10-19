@@ -35,6 +35,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/luz_mcp"]
 
+# local files (editor settings, Finder metadata) never ship, whatever the global gitignore says
+[tool.hatch.build.targets.sdist]
+exclude = [".claude", "**/.DS_Store"]
+
 # development only: the engine from the sibling checkout (uv ignores this when building for PyPI)
 [tool.uv.sources]
 parlaibero-mcp = { path = "../../parlaibero_tools/mcp", editable = true }

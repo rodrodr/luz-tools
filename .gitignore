@@ -5,3 +5,5 @@ dist/
 uv.lock
 .env
 .pytest_cache/
+.DS_Store
+.claude/settings.local.json
