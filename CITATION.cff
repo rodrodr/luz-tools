@@ -7,8 +7,8 @@ authors:
     given-names: Rodrigo
     orcid: "https://orcid.org/0000-0002-6912-7689"
     affiliation: "Universidad de Salamanca"
-version: "0.3.0"
-date-released: "2026-10-18"
+version: "0.4.0"
+date-released: "2026-10-19"
 license: MIT
 repository-code: "https://github.com/rodrodr/luz-tools"
 references:
