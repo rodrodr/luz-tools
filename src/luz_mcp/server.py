@@ -521,20 +521,19 @@ def brokerage_roles(
 @mcp.tool(annotations=WRITE_LOCAL)
 def transpartisan_cosigning(
     legislature: Legislature = None, by: GroupKey = "party",
-    threshold: Annotated[float, Field(gt=0, le=1, description="A measure is transpartisan when at least this share "
-                                                               "of its co-signatories is from other groups")] = 0.2,
     who: Annotated[str | None, Field(description="A deputy (needs a legislature)")] = None,
     top: Annotated[int, Field(ge=1, le=500)] = 20,
     min_measures: Annotated[int, Field(ge=0, description="Deputies in the rankings signed at least this many")] = 5,
     topic: Topic = None, measure_type: MeasureType = None, date_from: DateFrom = None, date_to: DateTo = None,
     include_truncated: Truncated = True, path: CsvPath = None, overwrite: bool = False,
 ) -> dict:
-    """Co-signing across parties, families, ideologies or regions (in the spirit of Harbridge's 2015
-    bipartisan cosponsorship): the share of co-signature dyads that cross groups, for the chamber
-    (each legislature, by type and topic) and for each deputy as co-signatory, as first signatory
-    and over all pairs; and each measure's coalition (groups, share from other groups, span)."""
-    return groups.transpartisan_cosigning(legislature, by, threshold, who, top, min_measures, topic, measure_type,
-                                          date_from, date_to, include_truncated, path, overwrite)
+    """Co-signing across parties, families, ideologies or regions in a chamber of many parties: each
+    measure is uni-, bi- or multipartisan by the effective number of groups among its signatories
+    (NEP < 1.5, 1.5 to < 2.5, ≥ 2.5), for the chamber (each legislature, by type and topic) and for
+    each deputy; and the share of co-signature dyads that cross groups (Harbridge's 2015 dyadic
+    indicator), as co-signatory, as first signatory and over all pairs."""
+    return groups.transpartisan_cosigning(legislature, by, who, top, min_measures, topic, measure_type, date_from,
+                                          date_to, include_truncated, path, overwrite)
 
 
 @mcp.tool(annotations=WRITE_LOCAL)

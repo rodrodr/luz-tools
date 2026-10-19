@@ -156,14 +156,20 @@ uvx luz-mcp download
     nulo de Gould y Fernandez (1989), una red aleatoria de la misma densidad, que no descuenta la
     actividad y supone vínculos independientes: léanse como orden más que como significación. No son los
     seis roles publicados por Afinidades.
-  - `transpartisan_cosigning` es un indicador diádico agregado al diputado y a la cámara, en la línea de
-    Harbridge (2015). El umbral que convierte una medida en transpartidista es un parámetro de esta
-    herramienta (0,2 por defecto), no una cifra tomada de Harbridge. Los rankings de diputados ordenan por
-    el exceso sobre lo que obliga el tamaño de su grupo y dejan fuera los grupos de menos de tres.
+  - `transpartisan_cosigning` clasifica cada medida como unipartidista, bipartidista o multipartidista
+    por el número efectivo de partidos (NEP) de sus firmantes (Laakso y Taagepera 1979): por debajo de 1,5,
+    de 1,5 a menos de 2,5, y desde 2,5, es decir, el NEP redondeado. Una firma suelta de otro partido no
+    hace bipartidista una medida (6 + 1 firmantes dan NEP 1,32). Harbridge (2015) estudia una cámara de dos
+    partidos; este corte para una cámara de muchos es nuestro. Además da el indicador diádico de
+    Harbridge (la parte de las cofirmas que cruzan de grupo) agregado al diputado y a la cámara. Los
+    rankings de diputados ordenan por el exceso sobre lo que obliga el tamaño de su grupo y dejan fuera
+    los grupos de menos de tres.
   - `homophily` estima la probabilidad de vínculo entre dos diputados según compartan partido, familia,
-    ideología, distrito o región, con pruebas QAP y un logit diádico que fija la actividad de ambos. Los
-    errores típicos del logit son ingenuos; para un modelo completo se exportan las díadas y se ajusta un
-    ERGM. **No hay variables de género, raza ni comisión,** así que la homofilia por ellas no se puede
+    ideología, distrito o región, con pruebas QAP y un logit diádico que fija la actividad de ambos. Solo
+    entran los diputados que firmaron alguna de las medidas: quien no firmó ninguna no puede tener
+    vínculos. Los errores típicos del logit son ingenuos; para un modelo completo se exportan las díadas y
+    se ajusta un ERGM. MRQAP y ERGM confirman la homofilia
+    ([`analysis/inferencia_redes/INFORME.md`](analysis/inferencia_redes/INFORME.md)). **No hay variables de género, raza ni comisión,** así que la homofilia por ellas no se puede
     estimar.
 - **Algunas listas de firmas están truncadas en el Diario,** y a esas medidas les faltan aristas.
 - **`mention_network` no puede separar homónimos por sexo,** porque no hay variable de sexo. Los separa
@@ -257,9 +263,10 @@ The tools are listed in the table above. What to keep in mind:
   legislature, corrected for deputies who cannot reach one another (Wasserman and Faust; equal to
   Fowler's when reach is complete). The first signatory stands for the sponsor.
 - **The group measures are computed here too:** `brokerage_roles` (Gould and Fernandez; checked against
-  R's `sna`), `transpartisan_cosigning` (dyadic, after Harbridge 2015; its threshold is this tool's
-  parameter), `homophily` (dyadic, with QAP), `block_density` and `assortativity` (Newman). There is no
-  gender, race or committee variable.
+  R's `sna`), `transpartisan_cosigning` (each measure uni-, bi- or multipartisan by the effective number
+  of parties of its signatories, < 1.5, 1.5 to < 2.5, ≥ 2.5, our cut-off for a chamber of many parties;
+  plus Harbridge's 2015 dyadic indicator), `homophily` (dyadic, with QAP), `block_density` and
+  `assortativity` (Newman). There is no gender, race or committee variable.
 - **Some signature lists are truncated.**
 - **The chair is left out of `speech_by_network` by default.** It signs no initiatives but speaks
   in every sitting.

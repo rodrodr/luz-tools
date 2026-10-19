@@ -1,5 +1,19 @@
 # Changelog
 
+## Sin publicar
+
+- `transpartisan_cosigning`: cada medida es unipartidista, bipartidista o multipartidista según el número
+  efectivo de partidos (NEP, Laakso y Taagepera 1979) de sus firmantes: < 1,5, de 1,5 a < 2,5, ≥ 2,5. Sustituye
+  al umbral de cuota de cofirmantes de otros partidos (`threshold`), tomado de un marco bipartidista que no
+  encaja en una cámara de muchos partidos. Nuevos campos: `coalitions` y `mean_nep` por legislatura, tipo y
+  tema; `signed_uni/bi/multi`, `mean_nep_signed` y `mean_nep_first_signed` por diputado.
+- `homophily`: díadas, pruebas QAP y logit solo entre los diputados que firmaron alguna de las medidas
+  (`deputies_who_signed`). Los que no firmaron ninguna aportaban ceros estructurales y, en 1936-1939 (181 de
+  501), separaban el logit. Sus coeficientes coinciden ahora con los de R hasta 0,00005.
+- `analysis/inferencia_redes/`: la homofilia y los roles de intermediación, comprobados con MRQAP, ERGM de dos
+  modos y permutaciones (informe en `INFORME.md`). El sdist excluye `analysis`.
+- `CITATION.cff` en 0.3.0; el sdist excluye `.claude` y los `.DS_Store`; `.gitignore` los ignora.
+
 ## 0.3.0 · 2026-10-18 · publicada en PyPI
 
 - `connectedness`: la medida de *legislative connectedness* de Fowler (2006, *Political Analysis* 14: 456-487),

@@ -263,6 +263,35 @@ def test_brokerage_roles_by_hand():
     assert sum(ev[r][0] for r in G.ROLES) == pytest.approx(ev["total"][0])   # the five roles exhaust the triples
 
 
+def test_coalitions_by_effective_number():
+    from luz_mcp import groups as G
+    assert round(G._nep(Counter({"A": 6, "B": 1})), 2) == 1.32            # one stray signatory: still uni
+    assert G._coalition(G._nep(Counter({"A": 6, "B": 1}))) == "uni"
+    assert G._coalition(G._nep(Counter({"A": 3, "B": 3}))) == "bi"
+    assert G._coalition(G._nep(Counter({"A": 4, "B": 2, "C": 1}))) == "bi"   # NEP 2.33
+    assert G._coalition(G._nep(Counter({"A": 2, "B": 2, "C": 2}))) == "multi"
+
+
+def test_homophily_leaves_out_who_signed_nothing(monkeypatch, tmp_path):
+    from luz_mcp import groups as G
+    party = {1: "A", 2: "A", 3: "B", 4: "B", 5: "A", 6: "B"}        # 5 and 6 signed nothing
+    attrs = {x: {"partido": g, "familia_partidos": g, "ideologia": "C", "distrito": "Madrid",
+                 "region": "Castilla la Nueva", "ideo_pos": 3} for x, g in party.items()}
+    measures = [{"id_medida": 1, "sponsor": 1, "signers": [1, 2, 3], "signatures": 3},
+                {"id_medida": 2, "sponsor": 3, "signers": [3, 4], "signatures": 2}]
+    net = {"legislature": "1931-1933", "members": sorted(party), "attrs": attrs, "measures": measures,
+           "undirected": {(1, 2): 1, (1, 3): 1, (2, 3): 1, (3, 4): 1},
+           "directed": {(2, 1): 1, (3, 1): 1, (4, 3): 1}, "filters": {}}
+    monkeypatch.setattr(G, "_network", lambda *a, **k: net)
+    monkeypatch.setattr(G.ae, "_version_note", lambda: {})
+    h = G.homophily("1931-1933", permutations=0, path=str(tmp_path / "d.csv"))
+    s = h["summary"]
+    assert (s["members"], s["deputies_who_signed"], s["dyads"], s["ties"]) == (6, 4, 6, 4)
+    assert h["univariate"]["party"]["same_dyads"] == 2               # 1-2 and 3-4, not 5 or 6
+    dyads = list(csv.DictReader(open(h["files"][0], encoding="utf-8")))
+    assert len(dyads) == 6 and not {"5", "6"} & ({d["i"] for d in dyads} | {d["j"] for d in dyads})
+
+
 def test_assortativity_and_logit_by_hand():
     from luz_mcp import groups as G
     cliques = [("A", "A", 1.0)] * 3 + [("B", "B", 1.0)] * 3
@@ -279,14 +308,16 @@ def test_group_measures_on_the_data(home, tmp_path):
     from luz_mcp import groups as G
     t = G.transpartisan_cosigning(by="party")                        # measure 10: PSOE first, PRRS co-signs
     assert [c["pair_cross_share"] for c in t["chamber"][:2]] == [1.0, 1.0]
+    assert t["chamber"][0]["coalitions"] == {"uni": 0.0, "bi": 1.0, "multi": 0.0} and t["chamber"][0]["mean_nep"] == 2.0
     assert t["chamber"][1]["unlabelled_signatures"] == 3             # one illegible + two unprinted (declared 5)
     t = G.transpartisan_cosigning("1931-1933", who="Ana", min_measures=0, path=str(tmp_path / "t.csv"))
     d = t["deputy"]                                                  # PSOE: 2 of the 4 members
     assert (d["pair_cross_share"], d["baseline_cross_share"], d["cross_excess"]) == (1.0, 0.667, 0.333)
     assert t["most_transpartisan"] == [] and len(t["files"]) == 1    # groups of fewer than 3 are not ranked
-    h = G.homophily("1931-1933", permutations=10)
-    assert (h["summary"]["dyads"], h["summary"]["ties"]) == (6, 1)
-    assert h["univariate"]["party"]["same_dyads"] == 1               # Ana Uno and Presi Dente (PSOE)
+    h = G.homophily("1931-1933", permutations=10)                     # only Ana Uno and Blas Dos signed
+    s = h["summary"]
+    assert (s["members"], s["deputies_who_signed"], s["dyads"], s["ties"]) == (4, 2, 1, 1)
+    assert h["univariate"]["party"]["same_dyads"] == 0               # PSOE and PRRS
     b = G.block_density("1931-1933", by="party")
     assert b["density"]["PSOE"]["PRRS"] == 0.5 and b["density"]["PRRS"]["PRRS"] is None   # a group of one
     assert G.assortativity("1931-1933")["r"] == -1.0                 # the only tie crosses parties

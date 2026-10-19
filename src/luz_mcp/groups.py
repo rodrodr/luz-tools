@@ -62,6 +62,8 @@ CRISP = ("Crisp, B. F., Kanthak, K., & Leijonhufvud, J. (2004). The Reputations 
          "doi:10.1017/S0003055404041437")
 ALEMAN = ("Alemán, E., & Calvo, E. (2013). Explaining Policy Ties in Presidential Congresses: A Network Analysis of "
           "Bill Initiation Data. Political Studies 61(2): 356-377. doi:10.1111/j.1467-9248.2012.00964.x")
+LAAKSO = ("Laakso, M., & Taagepera, R. (1979). \"Effective\" Number of Parties: A Measure with Application to West "
+          "Europe. Comparative Political Studies 12(1): 3-27. doi:10.1177/001041407901200101")
 NEWMAN = ("Newman, M. E. J. (2003). Mixing patterns in networks. Physical Review E 67: 026126. "
           "doi:10.1103/PhysRevE.67.026126")
 
@@ -296,12 +298,31 @@ def brokerage_roles(legislature, by="party", who=None, top=10, topic=None, measu
 
 # ── transpartisan co-signing ──────────────────────────────────────────────────
 
-def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=None, top=20, min_measures=5,
-                            topic=None, measure_type=None, date_from=None, date_to=None, include_truncated=True,
-                            path=None, overwrite=False) -> dict:
-    """Co-signing across parties (or families, ideologies, regions): a dyadic indicator aggregated
-    to the deputy and to the chamber, in the spirit of Harbridge's (2015) bipartisan cosponsorship,
-    plus each measure's coalition (how many groups, what share of co-signatories from other groups)."""
+COALITIONS = ("uni", "bi", "multi")
+NEP_CUTS = (1.5, 2.5)  # NEP rounded to the nearest whole number of groups
+
+
+def _nep(counts: Counter) -> float:
+    """Laakso and Taagepera's effective number of groups among the signatories of a measure."""
+    tot = sum(counts.values())
+    return 1 / sum((v / tot) ** 2 for v in counts.values())
+
+
+def _coalition(nep: float) -> str:
+    return COALITIONS[0] if nep < NEP_CUTS[0] else COALITIONS[1] if nep < NEP_CUTS[1] else COALITIONS[2]
+
+
+def _coalition_shares(tally: Counter, n: int) -> dict:
+    return {k: _r(tally[k] / n, 3) if n else None for k in COALITIONS}
+
+
+def transpartisan_cosigning(legislature=None, by="party", who=None, top=20, min_measures=5, topic=None,
+                            measure_type=None, date_from=None, date_to=None, include_truncated=True, path=None,
+                            overwrite=False) -> dict:
+    """Co-signing across parties (or families, ideologies, regions) in a chamber of many parties:
+    each measure's coalition is uni-, bi- or multipartisan by the effective number of groups among
+    its signatories, and the share of co-signature dyads that cross groups (the dyadic indicator of
+    Harbridge 2015) is aggregated to the deputy and to the chamber."""
     _check_by(by)
     legs = [legislature] if legislature else ["1931-1933", "1933-1936", "1936-1939"]
     chamber, deputies, by_type, by_topic = [], {}, defaultdict(Counter), defaultdict(Counter)
@@ -309,8 +330,8 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
         net = _network(leg, topic, measure_type, date_from, date_to, None, include_truncated)
         info = {r["id_medida"]: r for r in ae._q(
             "SELECT id_medida, tipo, tema_principal FROM ae_measures WHERE left(legislatura, 4) = left(?, 4)", [leg])}
-        c = Counter()
-        span_sum = out_sum = groups_sum = 0.0
+        c, kinds = Counter(), Counter()
+        span_sum = out_sum = nep_sum = 0.0
         dep = defaultdict(Counter)
         sizes, N = Counter(_label(net, x, by) for x in net["members"]), len(net["members"])
         for m in net["measures"]:
@@ -322,27 +343,29 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
             if not co or g0 == NO_LABEL:
                 continue
             c["with_co_signatories"] += 1
-            labels = {_label(net, i, by) for i in s} - {NO_LABEL}
+            nep = _nep(Counter(_label(net, i, by) for i in s))
+            kind = _coalition(nep)
+            kinds[kind] += 1
+            nep_sum += nep
             cross = sum(_label(net, i, by) != g0 for i in co)
-            share = cross / len(co)
-            trans = share >= threshold
-            c["multigroup"] += len(labels) >= 2
-            c["transpartisan"] += trans
-            out_sum += share
-            groups_sum += len(labels)
+            out_sum += cross / len(co)
             pos = [p for p in ((net["attrs"].get(i) or {}).get("ideo_pos") for i in s) if p is not None]
             span_sum += max(pos) - min(pos) if pos else 0
             meta = info.get(m["id_medida"], {})
             for key, tally in ((meta.get("tipo"), by_type), (meta.get("tema_principal"), by_topic)):
                 tally[key]["measures"] += 1
-                tally[key]["transpartisan"] += trans
+                tally[key][kind] += 1
+                tally[key]["nep_x1000"] += round(nep * 1000)
             # directed dyads: each co-signature of the first signatory's measure
             c["directed_dyads"] += len(co)
             c["directed_cross"] += cross
             dep[m["sponsor"]]["first_signed"] += 1
-            dep[m["sponsor"]]["first_signed_transpartisan"] += trans
+            dep[m["sponsor"]]["first_signed_nep"] += nep
             dep[m["sponsor"]]["support_received"] += len(co)
             dep[m["sponsor"]]["support_received_cross"] += cross
+            for i in s:
+                dep[i][f"signed_{kind}"] += 1
+                dep[i]["signed_nep"] += nep
             for i in co:
                 dep[i]["co_signed"] += 1
                 dep[i]["support_given"] += 1
@@ -358,10 +381,9 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
                         dep[z]["pairs_cross"] += diff
         n = c["with_co_signatories"]
         chamber.append({"legislature": leg, "measures": c["measures"], "with_co_signatories": n,
-                        "multigroup_share": _r(c["multigroup"] / n, 3) if n else None,
-                        "transpartisan_share": _r(c["transpartisan"] / n, 3) if n else None,
+                        "coalitions": _coalition_shares(kinds, n),
+                        "mean_nep": _r(nep_sum / n, 2) if n else None,
                         "mean_share_from_other_groups": _r(out_sum / n, 3) if n else None,
-                        "mean_groups_per_measure": _r(groups_sum / n, 2) if n else None,
                         "mean_ideological_span": _r(span_sum / n, 2) if n else None,
                         "directed_dyads": c["directed_dyads"],
                         "directed_cross_share": _r(c["directed_cross"] / c["directed_dyads"], 3)
@@ -374,8 +396,11 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
                 g = _label(net, x, by)
                 base = (N - sizes[g]) / (N - 1)
                 share = v["pairs_cross"] / v["pairs"] if v["pairs"] else None
+                signed = sum(v[f"signed_{k}"] for k in COALITIONS)
                 deputies[x] = {**_who(net, x), "group": g, "group_size": sizes[g],
-                               "measures_signed": v["first_signed"] + v["co_signed"],
+                               "measures_signed": signed,
+                               **{f"signed_{k}": v[f"signed_{k}"] for k in COALITIONS},
+                               "mean_nep_signed": _r(v["signed_nep"] / signed, 2) if signed else None,
                                "pair_cross_share": _r(share, 3),
                                "baseline_cross_share": _r(base, 3),
                                "cross_excess": _r(share - base, 3) if share is not None else None,
@@ -383,16 +408,18 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
                                "support_given_cross_share": _r(v["support_given_cross"] / v["support_given"], 3)
                                if v["support_given"] else None,
                                "first_signed": v["first_signed"],
+                               "mean_nep_first_signed": _r(v["first_signed_nep"] / v["first_signed"], 2)
+                               if v["first_signed"] else None,
                                "support_received_cross_share": _r(v["support_received_cross"] / v["support_received"], 3)
-                               if v["support_received"] else None,
-                               "first_signed_transpartisan_share":
-                                   _r(v["first_signed_transpartisan"] / v["first_signed"], 3) if v["first_signed"] else None}
-    out = {"by": by, "threshold": threshold, "chamber": chamber,
-           "by_type": [{"type": k, "measures": v["measures"], "transpartisan_share": _r(v["transpartisan"] / v["measures"], 3)}
-                       for k, v in sorted(by_type.items(), key=lambda kv: -kv[1]["measures"])],
-           "by_topic": [{"topic": k, "measures": v["measures"],
-                         "transpartisan_share": _r(v["transpartisan"] / v["measures"], 3)}
-                        for k, v in sorted(by_topic.items(), key=lambda kv: -kv[1]["measures"])]}
+                               if v["support_received"] else None}
+
+    def breakdown(tally, key):
+        return [{key: k, "measures": v["measures"], "coalitions": _coalition_shares(v, v["measures"]),
+                 "mean_nep": _r(v["nep_x1000"] / 1000 / v["measures"], 2)}
+                for k, v in sorted(tally.items(), key=lambda kv: -kv[1]["measures"])]
+    out = {"by": by, "nep_cuts": {"uni": f"< {NEP_CUTS[0]}", "bi": f"{NEP_CUTS[0]} to < {NEP_CUTS[1]}",
+                                  "multi": f">= {NEP_CUTS[1]}"},
+           "chamber": chamber, "by_type": breakdown(by_type, "type"), "by_topic": breakdown(by_topic, "topic")}
     if legislature:
         active = [d for d in deputies.values() if d["measures_signed"] >= min_measures
                   and d["cross_excess"] is not None and d["group_size"] >= MIN_GROUP]
@@ -401,8 +428,10 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
         groups = defaultdict(list)
         for d in deputies.values():
             if d["pair_cross_share"] is not None:
-                groups[d["group"]].append(d["pair_cross_share"])
-        out["by_group"] = {g: {"deputies": len(v), "mean_pair_cross_share": _r(sum(v) / len(v), 3)}
+                groups[d["group"]].append(d)
+        out["by_group"] = {g: {"deputies": len(v),
+                               "mean_pair_cross_share": _r(sum(d["pair_cross_share"] for d in v) / len(v), 3),
+                               "mean_nep_signed": _r(sum(d["mean_nep_signed"] for d in v) / len(v), 2)}
                            for g, v in sorted(groups.items(), key=lambda kv: -len(kv[1]))}
         if who is not None:
             d = ae.resolve_deputy(who)
@@ -412,30 +441,32 @@ def transpartisan_cosigning(legislature=None, by="party", threshold=0.2, who=Non
     elif who is not None or path:
         raise ValueError("who and path need a legislature: the deputy-level indicators are computed within one.")
     out["method"] = [
+        "Measure: NEP = 1/Σ p_g², the effective number of groups among its identified signatories (Laakso and "
+        "Taagepera 1979), p_g the share of them in group g. Its coalition is uni below 1.5, bi from 1.5 to below 2.5, "
+        "multi from 2.5: NEP rounded to the nearest whole number of groups. One signatory from another group does not "
+        "make a measure bi (6 + 1 signatories give NEP 1.32); two groups of equal weight give 2.",
         "Dyadic, aggregated: every co-signature is a dyad co-signatory → first signatory (directed), and every pair of "
         "signatories of a measure is an undirected dyad. A dyad crosses when its two deputies are in different groups "
-        "of the register for that legislature.",
-        "Chamber: directed_cross_share and pair_cross_share are the shares of crossing dyads. Deputy: "
+        "of the register for that legislature. Chamber: directed_cross_share and pair_cross_share. Deputy: "
         "pair_cross_share (with by='party' it equals 1 − party_frac_partido published by Afinidades), "
         "support_given_cross_share (as co-signatory), support_received_cross_share (as first signatory).",
-        f"Measure: the share of its co-signatories from groups other than the first signatory's; it is transpartisan "
-        f"when that share is at least threshold ({threshold}), multigroup when its signatories span two or more groups. "
-        "mean_ideological_span is the range of positions (EI = 0 … ED = 6) among its signatories.",
+        "mean_share_from_other_groups: the share of a measure's co-signatories from groups other than the first "
+        "signatory's, averaged. mean_ideological_span: the range of positions (EI = 0 … ED = 6) among its signatories.",
     ]
     out["notes"] = [
-        "Computed here from the signatures. In a chamber of many parties 'bipartisan' becomes 'across groups': pick "
-        "the grouping (party, family, ideology) that fits the question.",
-        "The threshold is a parameter of this tool, not a figure taken from Harbridge (2015): set it to the cut-off of "
-        "the work you follow, or read the continuous shares.",
-        "Illegible signatures and the unprinted ones of truncated lists have no label: they are left out of every "
-        "share and counted in unlabelled_signatures.",
-        "Measures with a single signature have no dyad and are left out of the shares.",
+        "Computed here from the signatures.",
+        "Harbridge (2015) studies a two-party chamber, where co-signing is either within the party or bipartisan. With "
+        "many parties the question is how many groups a measure brings together; the NEP cut-off above is this "
+        "project's, not hers. With by='family' (or ideology, region) NEP counts families (ideologies, regions).",
+        "Illegible signatures and the unprinted ones of truncated lists have no label: they are left out of NEP and of "
+        "every share, and counted in unlabelled_signatures.",
+        "Measures with a single signature have no coalition and no dyad and are left out.",
         f"A deputy of a small group crosses almost by force: the rankings order deputies by cross_excess, their "
         f"pair_cross_share minus baseline_cross_share (the share of the other members outside their group, what "
         f"choosing partners at random would give), and leave out groups of fewer than {MIN_GROUP} members.",
     ]
     out["datasets"] = ae._version_note()
-    out["cite"] = [HARBRIDGE]
+    out["cite"] = [HARBRIDGE, LAAKSO]
     return out
 
 
@@ -500,7 +531,8 @@ def homophily(legislature, ties="undirected", min_weight=1, permutations=200, se
               overwrite=False) -> dict:
     """Dyadic homophily: the probability of a co-signature tie between two deputies given that they
     share party, family, ideology, district or region, with QAP permutation tests, and a dyadic
-    logit of the tie on all of them at once, controlling for how active both deputies are."""
+    logit of the tie on all of them at once, controlling for how active both deputies are. Only
+    deputies who signed at least one of the measures can be tied, so only they enter."""
     if ties not in ("directed", "undirected"):
         raise ValueError("ties must be directed or undirected")
     net = _network(legislature, topic, measure_type, date_from, date_to, measure_ids, include_truncated, min_weight)
@@ -508,7 +540,13 @@ def homophily(legislature, ties="undirected", min_weight=1, permutations=200, se
     tie_w = net["directed"] if directed else net["undirected"]
     if not tie_w:
         raise store.NoData("No co-signatures for these measures.")
-    members = net["members"]
+    activity = Counter()
+    for m in net["measures"]:
+        for i in set(m["signers"] or []):
+            activity[i] += 1
+    # a deputy who signed none of the measures cannot be tied: their dyads are structural zeros, which
+    # add nothing but certain non-ties and, when there are many (1936-1939), separate the logit
+    members = [x for x in net["members"] if activity[x]]
     idx = {x: k for k, x in enumerate(members)}
     N = len(members)
     labels = {a: [(net["attrs"][x].get(GROUP_KEYS[a]) or None) for x in members] for a in ATTRIBUTES}
@@ -551,10 +589,6 @@ def homophily(legislature, ties="undirected", min_weight=1, permutations=200, se
                   "odds_ratio": _r(odds, 3),
                   "qap_p": _r((hits + 1) / (permutations + 1), 4) if permutations else None}
     # multivariate: cells of (same party, family, district, region, ideology distance, activity classes)
-    activity = Counter()
-    for m in net["measures"]:
-        for i in set(m["signers"] or []):
-            activity[i] += 1
     vals = sorted(activity[x] for x in members)
     q1, q2 = vals[N // 3], vals[2 * N // 3]  # cut by value: equal activity, same tercile
     tercile = {x: 0 if activity[x] <= q1 else 1 if activity[x] <= q2 else 2 for x in members}
@@ -591,8 +625,8 @@ def homophily(legislature, ties="undirected", min_weight=1, permutations=200, se
     data = [([1.0, *map(float, same), float(dist)] + [float(cls == c) for c in classes[1:]], n, y)
             for (same, dist, cls), (n, y) in agg.items()]
     out = {"legislature": legislature, "ties": ties,
-           "summary": {"members": N, "dyads": dyads, "ties": len(tie_w), "density": _r(len(tie_w) / dyads, 5),
-                       "permutations": permutations},
+           "summary": {"members": len(net["members"]), "deputies_who_signed": N, "dyads": dyads, "ties": len(tie_w),
+                       "density": _r(len(tie_w) / dyads, 5), "permutations": permutations},
            "univariate": uni, "qap_p_floor": _r(1 / (permutations + 1), 4) if permutations else None,
            "logit": {**_logit(data, names),
                      "reference_activity": f"activity {names_t[classes[0][0]]}-{names_t[classes[0][1]]}",
@@ -600,8 +634,10 @@ def homophily(legislature, ties="undirected", min_weight=1, permutations=200, se
     if path:
         out["files"] = [_write_rows(_out_path(path, None, overwrite)[0], rows_out)]
     out["method"] = [
-        ("Directed dyads (co-signatory → first signatory)" if directed else "Undirected dyads") + " among all members "
-        "of the legislature, isolated ones included. A tie is at least min_weight measures signed together.",
+        ("Directed dyads (co-signatory → first signatory)" if directed else "Undirected dyads") + " among the members "
+        "of the legislature who signed at least one of the measures (deputies_who_signed): one who signed none cannot "
+        "be tied, and their dyads would only add certain non-ties. A tie is at least min_weight measures signed "
+        "together.",
         "univariate: P(tie | same group) and P(tie | different groups), their ratio and odds ratio. qap_p: the share "
         "of random reassignments of the deputies' attributes (the network kept as it is, so each deputy's activity "
         "too) with at least as many same-group ties as observed, (hits + 1)/(permutations + 1). A qap_p equal to "
