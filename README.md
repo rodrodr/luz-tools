@@ -169,7 +169,7 @@ uvx luz-mcp download
     entran los diputados que firmaron alguna de las medidas: quien no firmó ninguna no puede tener
     vínculos. Los errores típicos del logit son ingenuos; para un modelo completo se exportan las díadas y
     se ajusta un ERGM. MRQAP y ERGM confirman la homofilia
-    ([`analysis/inferencia_redes/INFORME.md`](analysis/inferencia_redes/INFORME.md)). **No hay variables de género, raza ni comisión,** así que la homofilia por ellas no se puede
+    ([`analysis/inferencia_redes/INFORME.md`](https://github.com/rodrodr/luz-tools/blob/main/analysis/inferencia_redes/INFORME.md)). **No hay variables de género, raza ni comisión,** así que la homofilia por ellas no se puede
     estimar.
 - **Algunas listas de firmas están truncadas en el Diario,** y a esas medidas les faltan aristas.
 - **`mention_network` no puede separar homónimos por sexo,** porque no hay variable de sexo. Los separa
